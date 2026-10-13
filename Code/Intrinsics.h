@@ -1,0 +1,16 @@
+#ifndef INTRINSICS_H
+#define INTRINSICS_H
+
+#if SIMD_AVX
+
+	#define SIMD_WIDE_SIZE 8
+
+#elif SIMD_SSE
+
+	#define SIMD_WIDE_SIZE 4
+
+#endif
+
+#define SIMD_BYTE_ALIGNMENT_SIZE ((SIMD_WIDE_SIZE*BITMAP_BYTES_PER_PIXEL) - 1)
+
+#endif
