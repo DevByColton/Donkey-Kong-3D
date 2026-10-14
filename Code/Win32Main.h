@@ -20,6 +20,12 @@ struct Win32OffscreenBuffer
 	int pitch = {};
 };
 
+struct Win32WindowDimensions
+{
+	int width = {};
+	int height = {};
+};
+
 struct Win32State
 {	
 	bool showCursor = true;

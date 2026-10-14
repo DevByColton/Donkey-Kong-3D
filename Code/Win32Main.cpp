@@ -62,6 +62,64 @@ Win32ResizeDIBSection(Win32OffscreenBuffer *buffer, int width, int height)
 	buffer->memory = VirtualAlloc(0, bitmapMemorySize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
 }
 
+internal_link Win32WindowDimensions
+Win32GetWindowDimensions(HWND window)
+{
+	Win32WindowDimensions dimensions = {};
+	RECT clientRect = {};
+	
+	GetClientRect(window, &clientRect);
+	dimensions.width = clientRect.right - clientRect.left;
+	dimensions.height = clientRect.bottom - clientRect.top;
+
+	return dimensions;
+}
+
+internal_link void
+Win32DisplayBufferToWindow(Win32State* state, Win32OffscreenBuffer* buffer, HDC deviceContext, int windowWidth, int windowHeight)
+{
+	// TODO: Place holder to just stretch to fullscreen
+	// DPI effects this, such as any kind of of windows zoom
+
+	// NOTE: 2560x1440
+	// bool32 is1080 = (windowWidth == (buffer->width + (int)(buffer->width*0.5f))) && (windowHeight == buffer->height + (int)(buffer->height*0.5f));
+	// bool32 is1440 = (windowWidth == buffer->width*2) && (windowHeight == buffer->height*2);
+	if (state->fullscreen)
+	{
+		// Below always makes the buffer stretch to fill the window
+		// This will introduce artifacts when stretched in different ways
+		StretchDIBits(deviceContext,
+					  0, 0, windowWidth, windowHeight,
+					  0, 0, buffer->width, buffer->height,
+					  buffer->memory,
+					  &buffer->info,
+					  DIB_RGB_COLORS, SRCCOPY);
+	}
+	else
+	{
+#if 1		
+		// NOTE: Black bars
+		int offsetX = 0;
+		int offsetY = 0;
+		PatBlt(deviceContext, 0, 0, windowWidth, offsetY, BLACKNESS);
+		PatBlt(deviceContext, 0, offsetY + buffer->height, windowWidth, windowHeight, BLACKNESS);
+		PatBlt(deviceContext, 0, 0, offsetX, windowHeight, BLACKNESS);
+		PatBlt(deviceContext, offsetX + buffer->width, 0, windowWidth, windowHeight, BLACKNESS);
+#else
+		int offsetX = 0;
+		int offsetY = 0;
+#endif		
+
+		// Always show pixels 1 to 1
+		StretchDIBits(deviceContext,
+					  offsetX, offsetY, buffer->width, buffer->height,
+					  0, 0, buffer->width, buffer->height,
+					  buffer->memory,
+					  &buffer->info,
+					  DIB_RGB_COLORS, SRCCOPY);
+	}
+}
+
 internal_link void
 Win32ProcessButtonMessage(GameButton* newState, bool isDown)
 {
@@ -119,11 +177,11 @@ Win32ProcessPendingMessages(HWND window, Win32OffscreenBuffer* backBuffer, GameM
 			// Use windows graphics to draw
 			case WM_APP_PAINT:
 			{
-				// PAINTSTRUCT paint = {};
-				// HDC deviceContext = BeginPaint(window, &paint);
-				// Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
-				// Win32DisplayBufferToWindow(state, backBuffer, deviceContext, dimensions.width, dimensions.height);
-				// EndPaint(window, &paint);
+				PAINTSTRUCT paint = {};
+				HDC deviceContext = BeginPaint(window, &paint);
+				Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
+				Win32DisplayBufferToWindow(state, backBuffer, deviceContext, dimensions.width, dimensions.height);
+				EndPaint(window, &paint);
 			} break;
 
 			// case WM_APP_SETCURSOR:
@@ -317,7 +375,6 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 			PostMessageA(window, WM_APP_ACTIVATEAPP, wParam, lParam);
 		} break;
 
-		// Use windows graphics to draw
 		case WM_PAINT:
 		{
 			PostMessageA(window, WM_APP_PAINT, wParam, lParam);
@@ -339,7 +396,7 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 		case WM_XBUTTONUP:
 		case WM_XBUTTONDOWN:
 		{
-			ASSERT("Mouse event came through in a non dispatch method!");
+			assert(!"Mouse event came through in a non dispatch method!");
 		} break;
 
 		// Keyboard input key DOWN
@@ -348,7 +405,7 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 		case WM_SYSKEYUP:
 		case WM_KEYUP:
 		{
-			ASSERT("Keyboard input came through in a non dispatch method!");
+			assert(!"Keyboard input came through in a non dispatch method!");
 		} break;
 
 		// Every other unhandled message, there is a lot
@@ -359,6 +416,21 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 		} break;
 	}
 
+	return result;
+}
+
+inline LARGE_INTEGER
+Win32GetWallClock()
+{
+	LARGE_INTEGER result = {};
+	QueryPerformanceCounter(&result);
+	return result;
+}
+
+inline float
+Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER end, uint64 perfCountFrequency)
+{
+	float result = ((float)(end.QuadPart - start.QuadPart) / (float)perfCountFrequency);
 	return result;
 }
 
@@ -374,6 +446,8 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 	windowClass.hCursor= LoadCursor(0, IDC_ARROW);
 	// windowClass.hIcon;
 	// windowClass.hIconSm;
+
+	Win32State win32State = {};
 
 	if (RegisterClassExA(&windowClass))
 	{
@@ -391,6 +465,13 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 		{
 			HDC deviceContext = GetDC(window);
 
+			LARGE_INTEGER perfomanceCountFrequencyResult = {};
+			QueryPerformanceFrequency(&perfomanceCountFrequencyResult);
+			win32State.perfCountFrequency = perfomanceCountFrequencyResult.QuadPart;
+			
+			// NOTE: Set the scheduler granularity to 1 millisecond, this is so the Sleep() can be more granular
+			int sleepIsGranular = (timeBeginPeriod(1) == TIMERR_NOERROR);
+
 			// NOTE: Set up frame rate
 			int defaultRefreshHz = 60;
 			int win32RefreshRate = GetDeviceCaps(deviceContext, VREFRESH);
@@ -405,7 +486,64 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			Win32OffscreenBuffer backBuffer = {};
 			Win32ResizeDIBSection(&backBuffer, 1920, 1080);
 
-			OutputDebugStringA("Made the window\n");
+			LARGE_INTEGER previousFrameCounter = Win32GetWallClock();
+			GameInput input = {};
+			GameStatus gameStatus = {};
+			gameStatus.isRunning = true;
+
+			while (gameStatus.isRunning)
+			{
+				gameStatus.deltaTime = targetSecondsElapsedPerFrame;
+
+				// NOTE: Event & Input processing
+				GameMouseInput* mouse = &input.mouse;
+				GameControllerInput* keyboard = &input.controllers[0];
+				Win32ProcessPendingMessages(window, &backBuffer, mouse, keyboard, &gameStatus, &win32State);
+
+				// NOTE: Use the graphics buffer to display the frame
+				Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
+				Win32DisplayBufferToWindow(&win32State, &backBuffer, deviceContext, dimensions.width, dimensions.height);
+
+				if (keyboard->k.endedDown)
+				{
+					gameStatus.isRunning = false;
+				}
+
+				// NOTE: Make sure the frame took less time than the target framerate
+				float secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), win32State.perfCountFrequency);
+				if (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
+				{
+					while (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
+					{
+						if (sleepIsGranular)
+						{
+							DWORD sleepMilliseconds = (DWORD)(1000.f * (targetSecondsElapsedPerFrame - secondsElapsedForFrame));
+
+							if (sleepMilliseconds > 0)
+							{
+								Sleep(sleepMilliseconds);
+							}
+						}
+
+						secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), win32State.perfCountFrequency);
+					}
+				}
+				else
+				{
+					OutputDebugStringA("Missed target frame rate\n");
+				}
+
+				LARGE_INTEGER endFrameCounter = Win32GetWallClock();
+				float msPerFrame = 1000.f * Win32GetSecondsElapsed(previousFrameCounter, endFrameCounter, win32State.perfCountFrequency);
+				previousFrameCounter = endFrameCounter;
+
+				if (keyboard->p.endedDown)
+				{
+					char performancePrintBuffer[128];
+					sprintf_s(performancePrintBuffer, "Frame time: %.03fms\n", msPerFrame);
+					OutputDebugStringA(performancePrintBuffer);
+				}
+			}
 		}
 		else
 		{

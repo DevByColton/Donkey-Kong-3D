@@ -3,6 +3,8 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cassert>
+#include <cstdio>  // NOTE: Really just for debug string printing
 
 //
 // Types defs
@@ -23,8 +25,6 @@ typedef std::size_t sizet;
 
 typedef intptr_t intptr;
 typedef uintptr_t uintptr;
-
-#define ASSERT(expression) static_assert(expression)
 
 union Vector2
 {

@@ -3,13 +3,13 @@
 cls
 
 REM Full Debug -Od -Zo
-REM set OptimizationFlags=-Od -Zo -Oi -fp:fast
+set OptimizationFlags=-Od -Zo -Oi -fp:fast
 
 REM Release with debug SOME debug info from -Zo
 REM set OptimizationFlags=-O2 -Zo -Oi -fp:fast
 
 REM Release flags -O2
-set OptimizationFlags=-O2 -Oi -fp:fast
+REM set OptimizationFlags=-O2 -Oi -fp:fast
 
 set CPlusPlusVersion=-std:c++20
 set WarningFlags=-W4 -wd4505 -wd4201 -wd4100 -wd4189 -wd4456
