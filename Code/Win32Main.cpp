@@ -1,124 +1,6 @@
 #include "Win32Main.h"
-
-internal_link void
-Win32ToggleFullScreen(HWND window, Win32State* state)
-{
-	WINDOWPLACEMENT* windowPosition = &state->windowPosition;
-	DWORD style = GetWindowLong(window, GWL_STYLE);
-
-	// NOTE: Windowed
-	if (style & WS_OVERLAPPEDWINDOW)
-	{
-		MONITORINFO monitorInfo = { sizeof(monitorInfo) };
-
-		if (GetWindowPlacement(window, windowPosition) && 
-			GetMonitorInfo(MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY), &monitorInfo))
-		{
-			SetWindowLong(window, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
-			SetWindowPos(window, HWND_TOP,
-						 monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.top,
-						 monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
-						 monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
-						 SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-
-			state->fullscreen = true;
-		}
-	}
-	else
-	{
-		SetWindowLong(window, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
-		SetWindowPlacement(window, windowPosition);
-		SetWindowPos(window, 0, 0, 0, 0, 0,
-					 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | 
-					 SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-
-		state->fullscreen = false;
-	}
-}
-
-internal_link void
-Win32ResizeDIBSection(Win32OffscreenBuffer *buffer, int width, int height)
-{
-	if (buffer->memory)
-	{
-		VirtualFree(buffer->memory, 0, MEM_RELEASE);
-	}
-
-	// NOTE: When the biHeight field is negative, this tells windows to treat
-	// the bitmap as top down, not bottom up. Meaning that the first 3 bytes
-	// of the image are the color for the top left pixel in the bitmap
-	buffer->width = width;
-	buffer->height = height;
-	buffer->info.bmiHeader.biSize = sizeof(buffer->info.bmiHeader);
-	buffer->info.bmiHeader.biWidth = buffer->width;
-	buffer->info.bmiHeader.biHeight = buffer->height; // Top down
-	buffer->info.bmiHeader.biPlanes = 1;
-	buffer->info.bmiHeader.biBitCount = 32;
-	buffer->info.bmiHeader.biCompression = BI_RGB;
-	
-	// NOTE: 32 bit count, 8 r, 8 g, 8 b, and 8 padding
-	buffer->pitch = (((buffer->width*BITMAP_BYTES_PER_PIXEL) + SIMD_BYTE_ALIGNMENT_SIZE) & ~SIMD_BYTE_ALIGNMENT_SIZE);
-	int bitmapMemorySize = (buffer->pitch*buffer->height);
-	buffer->memory = VirtualAlloc(0, bitmapMemorySize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-}
-
-internal_link Win32WindowDimensions
-Win32GetWindowDimensions(HWND window)
-{
-	Win32WindowDimensions dimensions = {};
-	RECT clientRect = {};
-	
-	GetClientRect(window, &clientRect);
-	dimensions.width = clientRect.right - clientRect.left;
-	dimensions.height = clientRect.bottom - clientRect.top;
-
-	return dimensions;
-}
-
-internal_link void
-Win32DisplayBufferToWindow(Win32State* state, Win32OffscreenBuffer* buffer, HDC deviceContext, int windowWidth, int windowHeight)
-{
-	// TODO: Place holder to just stretch to fullscreen
-	// DPI effects this, such as any kind of of windows zoom
-
-	// NOTE: 2560x1440
-	// bool32 is1080 = (windowWidth == (buffer->width + (int)(buffer->width*0.5f))) && (windowHeight == buffer->height + (int)(buffer->height*0.5f));
-	// bool32 is1440 = (windowWidth == buffer->width*2) && (windowHeight == buffer->height*2);
-	if (state->fullscreen)
-	{
-		// Below always makes the buffer stretch to fill the window
-		// This will introduce artifacts when stretched in different ways
-		StretchDIBits(deviceContext,
-					  0, 0, windowWidth, windowHeight,
-					  0, 0, buffer->width, buffer->height,
-					  buffer->memory,
-					  &buffer->info,
-					  DIB_RGB_COLORS, SRCCOPY);
-	}
-	else
-	{
-#if 1		
-		// NOTE: Black bars
-		int offsetX = 0;
-		int offsetY = 0;
-		PatBlt(deviceContext, 0, 0, windowWidth, offsetY, BLACKNESS);
-		PatBlt(deviceContext, 0, offsetY + buffer->height, windowWidth, windowHeight, BLACKNESS);
-		PatBlt(deviceContext, 0, 0, offsetX, windowHeight, BLACKNESS);
-		PatBlt(deviceContext, offsetX + buffer->width, 0, windowWidth, windowHeight, BLACKNESS);
-#else
-		int offsetX = 0;
-		int offsetY = 0;
-#endif		
-
-		// Always show pixels 1 to 1
-		StretchDIBits(deviceContext,
-					  offsetX, offsetY, buffer->width, buffer->height,
-					  0, 0, buffer->width, buffer->height,
-					  buffer->memory,
-					  &buffer->info,
-					  DIB_RGB_COLORS, SRCCOPY);
-	}
-}
+#include "DirectX.cpp"
+#include "Game.cpp"
 
 internal_link void
 Win32ProcessButtonMessage(GameButton* newState, bool isDown)
@@ -130,8 +12,7 @@ Win32ProcessButtonMessage(GameButton* newState, bool isDown)
 }
 
 internal_link void
-Win32ProcessPendingMessages(HWND window, Win32OffscreenBuffer* backBuffer, GameMouseInput* mouse, 
-						    GameControllerInput* keyboardController, GameStatus* gameStatus, Win32State* state)
+Win32ProcessPendingMessages(HWND window, GameMouseInput* mouse, GameControllerInput* keyboardController, GameStatus* gameStatus)
 {
 	MSG message = {};
 
@@ -172,16 +53,6 @@ Win32ProcessPendingMessages(HWND window, Win32OffscreenBuffer* backBuffer, GameM
 					// Todo: Handled lost foucs state, pause game, reset inputs etc
 					OutputDebugStringA("LOST focus\n");
 				}
-			} break;
-
-			// Use windows graphics to draw
-			case WM_APP_PAINT:
-			{
-				PAINTSTRUCT paint = {};
-				HDC deviceContext = BeginPaint(window, &paint);
-				Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
-				Win32DisplayBufferToWindow(state, backBuffer, deviceContext, dimensions.width, dimensions.height);
-				EndPaint(window, &paint);
 			} break;
 
 			// case WM_APP_SETCURSOR:
@@ -332,7 +203,7 @@ Win32ProcessPendingMessages(HWND window, Win32OffscreenBuffer* backBuffer, GameM
 					// Standard windows keys to full screen
 					if (keyboardController->enter.endedDown && altKeyWasDown)
 					{
-						Win32ToggleFullScreen(window, state);
+						// TODO: Toggle fullscreen
 					}
 				}
 			} break;
@@ -373,11 +244,6 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 		case WM_ACTIVATEAPP:
 		{
 			PostMessageA(window, WM_APP_ACTIVATEAPP, wParam, lParam);
-		} break;
-
-		case WM_PAINT:
-		{
-			PostMessageA(window, WM_APP_PAINT, wParam, lParam);
 		} break;
 
 		case WM_SETCURSOR:
@@ -447,8 +313,6 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 	// windowClass.hIcon;
 	// windowClass.hIconSm;
 
-	Win32State win32State = {};
-
 	if (RegisterClassExA(&windowClass))
 	{
 		HWND window = CreateWindowExA(
@@ -457,7 +321,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			"Donkey Kong 3D",
 			WS_OVERLAPPEDWINDOW | WS_VISIBLE,
 			200, 100,
-			2240, 1280,
+			1920, 1080,
 			0, 0, instance, 0
 		);
 
@@ -465,85 +329,107 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 		{
 			HDC deviceContext = GetDC(window);
 
-			LARGE_INTEGER perfomanceCountFrequencyResult = {};
-			QueryPerformanceFrequency(&perfomanceCountFrequencyResult);
-			win32State.perfCountFrequency = perfomanceCountFrequencyResult.QuadPart;
-			
-			// NOTE: Set the scheduler granularity to 1 millisecond, this is so the Sleep() can be more granular
-			int sleepIsGranular = (timeBeginPeriod(1) == TIMERR_NOERROR);
-
-			// NOTE: Set up frame rate
-			int defaultRefreshHz = 60;
-			int win32RefreshRate = GetDeviceCaps(deviceContext, VREFRESH);
-			if (win32RefreshRate > 1)
+			D3DResource d3dResource = {};
+			if (SUCCEEDED(D3DInitialize(&d3dResource, window)))
 			{
-				defaultRefreshHz = win32RefreshRate;
-			}
+				OutputDebugStringA("D3D is ready to go\n");
 
-			float gameUpdateHz = (float)defaultRefreshHz;
-			float targetSecondsElapsedPerFrame = 1.f / gameUpdateHz;
-
-			Win32OffscreenBuffer backBuffer = {};
-			Win32ResizeDIBSection(&backBuffer, 1920, 1080);
-
-			LARGE_INTEGER previousFrameCounter = Win32GetWallClock();
-			GameInput input = {};
-			GameStatus gameStatus = {};
-			gameStatus.isRunning = true;
-
-			while (gameStatus.isRunning)
-			{
-				gameStatus.deltaTime = targetSecondsElapsedPerFrame;
-
-				// NOTE: Event & Input processing
-				GameMouseInput* mouse = &input.mouse;
-				GameControllerInput* keyboard = &input.controllers[0];
-				Win32ProcessPendingMessages(window, &backBuffer, mouse, keyboard, &gameStatus, &win32State);
-
-				// NOTE: Use the graphics buffer to display the frame
-				Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
-				Win32DisplayBufferToWindow(&win32State, &backBuffer, deviceContext, dimensions.width, dimensions.height);
-
-				if (keyboard->k.endedDown)
+				// NOTE: Setup frame rate variabels
+				int defaultRefreshHz = 60;
+				int win32RefreshRate = GetDeviceCaps(deviceContext, VREFRESH);
+				if (win32RefreshRate > 1)
 				{
-					gameStatus.isRunning = false;
+					defaultRefreshHz = win32RefreshRate;
 				}
 
-				// NOTE: Make sure the frame took less time than the target framerate
-				float secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), win32State.perfCountFrequency);
-				if (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
+				float gameUpdateHz = (float)defaultRefreshHz;
+				float targetSecondsElapsedPerFrame = 1.f / gameUpdateHz;
+
+				// NOTE: Set the scheduler granularity to 1 millisecond, this is so the Sleep() can be more granular
+				bool sleepIsGranular = (timeBeginPeriod(1) == TIMERR_NOERROR);
+				LARGE_INTEGER perfomanceCountFrequencyResult = {};
+				QueryPerformanceFrequency(&perfomanceCountFrequencyResult);
+				uint64 perfomanceCountFrequency = perfomanceCountFrequencyResult.QuadPart;
+				LARGE_INTEGER previousFrameCounter = Win32GetWallClock();
+
+				GameInput input = {};
+				GameStatus gameStatus = {};
+				gameStatus.isRunning = true;
+				while (gameStatus.isRunning)
 				{
-					while (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
+					gameStatus.deltaTime = targetSecondsElapsedPerFrame;
+
+					GameMouseInput* mouse = &input.mouse;
+					GameControllerInput* keyboard = &input.controllers[0];
+					Win32ProcessPendingMessages(window, mouse, keyboard, &gameStatus);
+
+					if (keyboard->k.endedDown)
 					{
-						if (sleepIsGranular)
+						gameStatus.isRunning = false;
+						break;
+					}
+
+					Vector4 backBufferColor = Vector4{ 0.f, 0.96f, 0.831f, 1.f }; // 0,245,212
+					if (keyboard->w.endedDown)
+					{
+						backBufferColor = Vector4{ 0.f, 0.733f, 0.976f, 1.f }; // 0,187,249
+					}
+					if (keyboard->a.endedDown)
+					{
+						backBufferColor = Vector4{ 0.996f, 0.894f, 0.251f, 1.f }; // 254,228,64
+					}
+					if (keyboard->s.endedDown)
+					{
+						backBufferColor = Vector4{ 0.945f, 0.356f, 0.709f, 1.f }; // 241,91,181
+					}
+					if (keyboard->d.endedDown)
+					{
+						backBufferColor = Vector4{ 0.607f, 0.364f, 0.898f, 1.f }; // 155,93,229
+					}
+
+					GameUpdate(mouse, keyboard, &gameStatus);
+					GameRender(&d3dResource, backBufferColor);
+
+					// NOTE: Make sure the frame took less time than the target framerate
+					float secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), perfomanceCountFrequency);
+					if (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
+					{
+						while (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
 						{
-							DWORD sleepMilliseconds = (DWORD)(1000.f * (targetSecondsElapsedPerFrame - secondsElapsedForFrame));
-
-							if (sleepMilliseconds > 0)
+							if (sleepIsGranular)
 							{
-								Sleep(sleepMilliseconds);
-							}
-						}
+								DWORD sleepMilliseconds = (DWORD)(1000.f * (targetSecondsElapsedPerFrame - secondsElapsedForFrame));
 
-						secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), win32State.perfCountFrequency);
+								if (sleepMilliseconds > 0)
+								{
+									Sleep(sleepMilliseconds);
+								}
+							}
+
+							secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), perfomanceCountFrequency);
+						}
+					}
+					else
+					{
+						OutputDebugStringA("Missed target frame rate\n");
+					}
+
+					LARGE_INTEGER endFrameCounter = Win32GetWallClock();
+					float msPerFrame = 1000.f * Win32GetSecondsElapsed(previousFrameCounter, endFrameCounter, perfomanceCountFrequency);
+					previousFrameCounter = endFrameCounter;
+
+					if (keyboard->p.endedDown)
+					{
+						char performancePrintBuffer[128];
+						sprintf_s(performancePrintBuffer, "Frame time: %.03fms\n", msPerFrame);
+						OutputDebugStringA(performancePrintBuffer);
 					}
 				}
-				else
-				{
-					OutputDebugStringA("Missed target frame rate\n");
-				}
-
-				LARGE_INTEGER endFrameCounter = Win32GetWallClock();
-				float msPerFrame = 1000.f * Win32GetSecondsElapsed(previousFrameCounter, endFrameCounter, win32State.perfCountFrequency);
-				previousFrameCounter = endFrameCounter;
-
-				if (keyboard->p.endedDown)
-				{
-					char performancePrintBuffer[128];
-					sprintf_s(performancePrintBuffer, "Frame time: %.03fms\n", msPerFrame);
-					OutputDebugStringA(performancePrintBuffer);
-				}
 			}
+			else
+			{
+				OutputDebugStringA("Win32InitializeD3D failed\n");
+			}		
 		}
 		else
 		{
@@ -554,6 +440,8 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 	{
 		OutputDebugStringA("RegisterClassExA failed\n");
 	}
+
+	timeEndPeriod(1);
 
 	return 0;
 }

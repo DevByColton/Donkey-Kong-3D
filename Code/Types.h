@@ -37,4 +37,25 @@ union Vector2
 	float e[2];
 };
 
+union Vector4
+{
+	struct
+	{
+		float x;
+		float y;
+		float z;
+		float w;
+	};
+
+	struct
+	{
+		float r;
+		float g;
+		float b;
+		float a;
+	};
+
+	float e[4];
+};
+
 #endif
