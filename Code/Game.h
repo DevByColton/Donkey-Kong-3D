@@ -2,7 +2,6 @@
 #define GAME_H
 
 #include "Types.h"
-#include "Intrinsics.h"
 
 struct GameButton
 {
