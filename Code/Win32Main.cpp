@@ -1,12 +1,6 @@
 #include "Win32Main.h"
-#include "DirectX.cpp"
+#include "Direct3DRenderer.cpp"
 #include "Game.cpp"
-
-inline void
-AssertSuccess(HRESULT )
-{
-
-}
 
 internal_link void
 Win32ProcessButtonMessage(GameButton* newState, bool isDown)

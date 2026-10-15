@@ -1,4 +1,4 @@
-#include "DirectX.h"
+#include "Direct3DRenderer.h"
 
 internal_link HRESULT
 D3DConfigureBackBuffer(D3DResource* d3dResource)
