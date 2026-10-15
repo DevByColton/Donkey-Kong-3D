@@ -2,6 +2,12 @@
 #include "DirectX.cpp"
 #include "Game.cpp"
 
+inline void
+AssertSuccess(HRESULT )
+{
+
+}
+
 internal_link void
 Win32ProcessButtonMessage(GameButton* newState, bool isDown)
 {
@@ -12,7 +18,8 @@ Win32ProcessButtonMessage(GameButton* newState, bool isDown)
 }
 
 internal_link void
-Win32ProcessPendingMessages(HWND window, GameMouseInput* mouse, GameControllerInput* keyboardController, GameStatus* gameStatus)
+Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource,
+						    GameMouseInput* mouse, GameControllerInput* keyboardController, GameStatus* gameStatus)
 {
 	MSG message = {};
 
@@ -203,7 +210,7 @@ Win32ProcessPendingMessages(HWND window, GameMouseInput* mouse, GameControllerIn
 					// Standard windows keys to full screen
 					if (keyboardController->enter.endedDown && altKeyWasDown)
 					{
-						// TODO: Toggle fullscreen
+						// ToggleFullscreen(d3dResource);
 					}
 				}
 			} break;
@@ -327,109 +334,117 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 
 		if (window)
 		{
-			HDC deviceContext = GetDC(window);
-
 			D3DResource d3dResource = {};
-			if (SUCCEEDED(D3DInitialize(&d3dResource, window)))
-			{
-				OutputDebugStringA("D3D is ready to go\n");
+			HRESULT result = D3DInitialize(&d3dResource);
+			ASSERT_OK(result, "Unable to initialize D3D");
 
-				// NOTE: Setup frame rate variabels
-				int defaultRefreshHz = 60;
-				int win32RefreshRate = GetDeviceCaps(deviceContext, VREFRESH);
-				if (win32RefreshRate > 1)
+			result = D3DCreateSwapChain(&d3dResource, window);
+			ASSERT_OK(result, "Unable to create swap chain");
+
+			// NOTE: Setup frame rate variabels
+			HDC deviceContext = GetDC(window);
+			int defaultRefreshHz = 60;
+			int win32RefreshRate = GetDeviceCaps(deviceContext, VREFRESH);
+			if (win32RefreshRate > 1)
+			{
+				defaultRefreshHz = win32RefreshRate;
+			}
+
+			float gameUpdateHz = (float)defaultRefreshHz;
+			float targetSecondsElapsedPerFrame = 1.f / gameUpdateHz;
+
+			// NOTE: Set the scheduler granularity to 1 millisecond, this is so the Sleep() can be more granular
+			bool sleepIsGranular = (timeBeginPeriod(1) == TIMERR_NOERROR);
+			LARGE_INTEGER perfomanceCountFrequencyResult = {};
+			QueryPerformanceFrequency(&perfomanceCountFrequencyResult);
+			uint64 perfomanceCountFrequency = perfomanceCountFrequencyResult.QuadPart;
+			LARGE_INTEGER previousFrameCounter = Win32GetWallClock();
+
+			GameInput input = {};
+			GameStatus gameStatus = {};
+			gameStatus.isRunning = true;
+			while (gameStatus.isRunning)
+			{
+				gameStatus.deltaTime = targetSecondsElapsedPerFrame;
+
+				GameMouseInput* mouse = &input.mouse;
+				GameControllerInput* keyboard = &input.controllers[0];
+				Win32ProcessPendingMessages(window, &d3dResource, mouse, keyboard, &gameStatus);
+
+				if (keyboard->k.endedDown)
 				{
-					defaultRefreshHz = win32RefreshRate;
+					gameStatus.isRunning = false;
 				}
 
-				float gameUpdateHz = (float)defaultRefreshHz;
-				float targetSecondsElapsedPerFrame = 1.f / gameUpdateHz;
-
-				// NOTE: Set the scheduler granularity to 1 millisecond, this is so the Sleep() can be more granular
-				bool sleepIsGranular = (timeBeginPeriod(1) == TIMERR_NOERROR);
-				LARGE_INTEGER perfomanceCountFrequencyResult = {};
-				QueryPerformanceFrequency(&perfomanceCountFrequencyResult);
-				uint64 perfomanceCountFrequency = perfomanceCountFrequencyResult.QuadPart;
-				LARGE_INTEGER previousFrameCounter = Win32GetWallClock();
-
-				GameInput input = {};
-				GameStatus gameStatus = {};
-				gameStatus.isRunning = true;
-				while (gameStatus.isRunning)
+				if (keyboard->one.endedDown)
 				{
-					gameStatus.deltaTime = targetSecondsElapsedPerFrame;
+					D3DGoWindowed(&d3dResource);
+				}
 
-					GameMouseInput* mouse = &input.mouse;
-					GameControllerInput* keyboard = &input.controllers[0];
-					Win32ProcessPendingMessages(window, mouse, keyboard, &gameStatus);
+				if (keyboard->two.endedDown)
+				{
+					D3DGoFullscreen(&d3dResource);
+				}
 
-					if (keyboard->k.endedDown)
-					{
-						gameStatus.isRunning = false;
-						break;
-					}
+				Vector4 backBufferColor = Vector4{ 0.f, 0.96f, 0.831f, 1.f }; // 0,245,212
+				if (keyboard->w.endedDown)
+				{
+					backBufferColor = Vector4{ 0.f, 0.733f, 0.976f, 1.f }; // 0,187,249
+				}
+				if (keyboard->a.endedDown)
+				{
+					backBufferColor = Vector4{ 0.996f, 0.894f, 0.251f, 1.f }; // 254,228,64
+				}
+				if (keyboard->s.endedDown)
+				{
+					backBufferColor = Vector4{ 0.945f, 0.356f, 0.709f, 1.f }; // 241,91,181
+				}
+				if (keyboard->d.endedDown)
+				{
+					backBufferColor = Vector4{ 0.607f, 0.364f, 0.898f, 1.f }; // 155,93,229
+				}
 
-					Vector4 backBufferColor = Vector4{ 0.f, 0.96f, 0.831f, 1.f }; // 0,245,212
-					if (keyboard->w.endedDown)
-					{
-						backBufferColor = Vector4{ 0.f, 0.733f, 0.976f, 1.f }; // 0,187,249
-					}
-					if (keyboard->a.endedDown)
-					{
-						backBufferColor = Vector4{ 0.996f, 0.894f, 0.251f, 1.f }; // 254,228,64
-					}
-					if (keyboard->s.endedDown)
-					{
-						backBufferColor = Vector4{ 0.945f, 0.356f, 0.709f, 1.f }; // 241,91,181
-					}
-					if (keyboard->d.endedDown)
-					{
-						backBufferColor = Vector4{ 0.607f, 0.364f, 0.898f, 1.f }; // 155,93,229
-					}
+				GameUpdate(mouse, keyboard, &gameStatus);
+				GameRender(&d3dResource, backBufferColor);
 
-					GameUpdate(mouse, keyboard, &gameStatus);
-					GameRender(&d3dResource, backBufferColor);
-
-					// NOTE: Make sure the frame took less time than the target framerate
-					float secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), perfomanceCountFrequency);
-					if (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
+				// NOTE: Make sure the frame took less time than the target framerate
+				float secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), perfomanceCountFrequency);
+				if (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
+				{
+					while (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
 					{
-						while (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
+						if (sleepIsGranular)
 						{
-							if (sleepIsGranular)
+							DWORD sleepMilliseconds = (DWORD)(1000.f * (targetSecondsElapsedPerFrame - secondsElapsedForFrame));
+
+							if (sleepMilliseconds > 0)
 							{
-								DWORD sleepMilliseconds = (DWORD)(1000.f * (targetSecondsElapsedPerFrame - secondsElapsedForFrame));
-
-								if (sleepMilliseconds > 0)
-								{
-									Sleep(sleepMilliseconds);
-								}
+								Sleep(sleepMilliseconds);
 							}
-
-							secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), perfomanceCountFrequency);
 						}
-					}
-					else
-					{
-						OutputDebugStringA("Missed target frame rate\n");
-					}
 
-					LARGE_INTEGER endFrameCounter = Win32GetWallClock();
-					float msPerFrame = 1000.f * Win32GetSecondsElapsed(previousFrameCounter, endFrameCounter, perfomanceCountFrequency);
-					previousFrameCounter = endFrameCounter;
-
-					if (keyboard->p.endedDown)
-					{
-						char performancePrintBuffer[128];
-						sprintf_s(performancePrintBuffer, "Frame time: %.03fms\n", msPerFrame);
-						OutputDebugStringA(performancePrintBuffer);
+						secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), perfomanceCountFrequency);
 					}
+				}
+				else
+				{
+					OutputDebugStringA("Missed target frame rate\n");
+				}
+
+				LARGE_INTEGER endFrameCounter = Win32GetWallClock();
+				float msPerFrame = 1000.f * Win32GetSecondsElapsed(previousFrameCounter, endFrameCounter, perfomanceCountFrequency);
+				previousFrameCounter = endFrameCounter;
+
+				if (keyboard->p.endedDown)
+				{
+					char performancePrintBuffer[128];
+					sprintf_s(performancePrintBuffer, "Frame time: %.03fms\n", msPerFrame);
+					OutputDebugStringA(performancePrintBuffer);
 				}
 			}
-			else
-			{
-				OutputDebugStringA("Win32InitializeD3D failed\n");
-			}		
+
+			timeEndPeriod(1);		
+			D3DReleaseAll(&d3dResource);
 		}
 		else
 		{
@@ -440,8 +455,6 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 	{
 		OutputDebugStringA("RegisterClassExA failed\n");
 	}
-
-	timeEndPeriod(1);
 
 	return 0;
 }

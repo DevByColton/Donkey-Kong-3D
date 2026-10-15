@@ -13,4 +13,6 @@
 #define WM_APP_PAINT (WM_APP + 5)
 #define WM_APP_SETCURSOR (WM_APP + 6)
 
+#define ASSERT_OK(hResult, errorMessage) if(FAILED(hResult)){assert(!errorMessage);}
+
 #endif // WIN32MAIN_H
