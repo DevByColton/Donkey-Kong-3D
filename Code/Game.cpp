@@ -7,7 +7,7 @@ GameUpdate(GameMouseInput* mouse, GameControllerInput* keyboard, GameStatus* sta
 }
 
 internal_link void
-GameRender(D3DResource* d3dResource, Vector4 color)
+GameRender(D3DResource* d3dResource)
 {
-	D3DRenderAndPresent(d3dResource, color);
+	// Nothing do
 }

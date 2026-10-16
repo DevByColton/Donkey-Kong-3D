@@ -104,6 +104,10 @@ D3DCreateSwapChain(D3DResource* d3dResource, HWND window)
 	dxgiDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
 	dxgiDescription.OutputWindow = window;
 
+	// NOTE: To manually set the frame rate
+	// dxgiDescription.BufferDesc.RefreshRate.Numerator = 60;
+	// dxgiDescription.BufferDesc.RefreshRate.Denominator = 1;
+
 	IDXGIDevice3* dxgiDevice = {0};
 	HRESULT result = d3dResource->device->QueryInterface(__uuidof(IDXGIDevice3), (void **)&dxgiDevice);
 	ASSERT_OK(result, "Cannot create dxgiDevice");
@@ -195,6 +199,7 @@ D3DRenderAndPresent(D3DResource* d3dResource, Vector4 color)
 	// TODO: Index and vertex buffers, and shaders here
 	//
 
+	// NOTE: Presenting with vsync enabled
 	d3dResource->dxgiSwapChain->Present(1, 0);
 }
 

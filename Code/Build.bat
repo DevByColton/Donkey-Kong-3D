@@ -15,7 +15,7 @@ set CPlusPlusVersion=-std:c++20
 set WarningFlags=-W4 -wd4505 -wd4201 -wd4100 -wd4189 -wd4456
 set CommonCompilerFlags=-WL -nologo -MTd -Gm- -GR- -EHa- %CPlusPlusVersion% %OptimizationFlags% %WarningFlags% -FC -Z7 -GS-
 set CommonCompilerFlags=-DDEBUG=1 -DSIMD_AVX=1 -DSIMD_SSE=0 %CommonCompilerFlags%
-set CommonLinkerFlags=-incremental:no -opt:ref user32.lib gdi32.lib Winmm.lib XAudio2.lib Xinput.lib d3d11.lib dxgi.lib
+set CommonLinkerFlags=-incremental:no -opt:ref user32.lib XAudio2.lib Xinput.lib d3d11.lib dxgi.lib
 
 set DebugPath="C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Build"
 

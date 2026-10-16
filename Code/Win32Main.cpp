@@ -286,21 +286,6 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 	return result;
 }
 
-inline LARGE_INTEGER
-Win32GetWallClock()
-{
-	LARGE_INTEGER result = {};
-	QueryPerformanceCounter(&result);
-	return result;
-}
-
-inline float
-Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER end, uint64 perfCountFrequency)
-{
-	float result = ((float)(end.QuadPart - start.QuadPart) / (float)perfCountFrequency);
-	return result;
-}
-
 int CALLBACK
 WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showCode)
 {
@@ -335,31 +320,21 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			result = D3DCreateSwapChain(&d3dResource, window);
 			ASSERT_OK(result, "Unable to create swap chain");
 
-			// NOTE: Setup frame rate variabels
-			HDC deviceContext = GetDC(window);
-			int defaultRefreshHz = 60;
-			int win32RefreshRate = GetDeviceCaps(deviceContext, VREFRESH);
-			if (win32RefreshRate > 1)
-			{
-				defaultRefreshHz = win32RefreshRate;
-			}
-
-			float gameUpdateHz = (float)defaultRefreshHz;
-			float targetSecondsElapsedPerFrame = 1.f / gameUpdateHz;
-
-			// NOTE: Set the scheduler granularity to 1 millisecond, this is so the Sleep() can be more granular
-			bool sleepIsGranular = (timeBeginPeriod(1) == TIMERR_NOERROR);
-			LARGE_INTEGER perfomanceCountFrequencyResult = {};
-			QueryPerformanceFrequency(&perfomanceCountFrequencyResult);
-			uint64 perfomanceCountFrequency = perfomanceCountFrequencyResult.QuadPart;
-			LARGE_INTEGER previousFrameCounter = Win32GetWallClock();
+			LARGE_INTEGER frequency = {};
+			LARGE_INTEGER perviousFrameTime = {};
+			LARGE_INTEGER currentFrameTime = {};
+			QueryPerformanceFrequency(&frequency);
+			QueryPerformanceCounter(&perviousFrameTime);
 
 			GameInput input = {};
 			GameStatus gameStatus = {};
 			gameStatus.isRunning = true;
+
 			while (gameStatus.isRunning)
 			{
-				gameStatus.deltaTime = targetSecondsElapsedPerFrame;
+				QueryPerformanceCounter(&currentFrameTime);
+				gameStatus.deltaTime = ((float)(currentFrameTime.QuadPart - perviousFrameTime.QuadPart) / (float)frequency.QuadPart);
+				perviousFrameTime = currentFrameTime;
 
 				GameMouseInput* mouse = &input.mouse;
 				GameControllerInput* keyboard = &input.controllers[0];
@@ -399,45 +374,11 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				}
 
 				GameUpdate(mouse, keyboard, &gameStatus);
-				GameRender(&d3dResource, backBufferColor);
+				GameRender(&d3dResource);
 
-				// NOTE: Make sure the frame took less time than the target framerate
-				float secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), perfomanceCountFrequency);
-				if (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
-				{
-					while (secondsElapsedForFrame < targetSecondsElapsedPerFrame)
-					{
-						if (sleepIsGranular)
-						{
-							DWORD sleepMilliseconds = (DWORD)(1000.f * (targetSecondsElapsedPerFrame - secondsElapsedForFrame));
-
-							if (sleepMilliseconds > 0)
-							{
-								Sleep(sleepMilliseconds);
-							}
-						}
-
-						secondsElapsedForFrame = Win32GetSecondsElapsed(previousFrameCounter, Win32GetWallClock(), perfomanceCountFrequency);
-					}
-				}
-				else
-				{
-					OutputDebugStringA("Missed target frame rate\n");
-				}
-
-				LARGE_INTEGER endFrameCounter = Win32GetWallClock();
-				float msPerFrame = 1000.f * Win32GetSecondsElapsed(previousFrameCounter, endFrameCounter, perfomanceCountFrequency);
-				previousFrameCounter = endFrameCounter;
-
-				if (keyboard->p.endedDown)
-				{
-					char performancePrintBuffer[128];
-					sprintf_s(performancePrintBuffer, "Frame time: %.03fms\n", msPerFrame);
-					OutputDebugStringA(performancePrintBuffer);
-				}
+				D3DRenderAndPresent(&d3dResource, backBufferColor);		
 			}
-
-			timeEndPeriod(1);		
+		
 			D3DReleaseAll(&d3dResource);
 		}
 		else
