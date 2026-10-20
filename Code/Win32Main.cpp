@@ -12,8 +12,7 @@ Win32ProcessButtonMessage(GameButton* newState, bool isDown)
 }
 
 internal_link void
-Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource,
-						    GameMouseInput* mouse, GameControllerInput* keyboardController, GameStatus* gameStatus)
+Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInput* mouse, GameControllerInput* keyboardController, GameStatus* gameStatus)
 {
 	MSG message = {};
 
@@ -204,6 +203,7 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource,
 					// Standard windows keys to full screen
 					if (keyboardController->enter.endedDown && altKeyWasDown)
 					{
+						// TODO: Figure this out
 						// ToggleFullscreen(d3dResource);
 					}
 				}
@@ -306,7 +306,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			windowClass.lpszClassName,
 			"Donkey Kong 3D",
 			WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-			200, 100,
+			CW_USEDEFAULT, CW_USEDEFAULT, // 200, 100,
 			1920, 1080,
 			0, 0, instance, 0
 		);
@@ -330,6 +330,10 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			GameStatus gameStatus = {};
 			gameStatus.isRunning = true;
 
+			// NOTE: Testing geometry
+			Cube cubes[4] = {0};
+			CreateCubes(cubes, d3dResource.device, &d3dResource.backBufferDescription);
+
 			while (gameStatus.isRunning)
 			{
 				QueryPerformanceCounter(&currentFrameTime);
@@ -340,19 +344,41 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				GameControllerInput* keyboard = &input.controllers[0];
 				Win32ProcessPendingMessages(window, &d3dResource, mouse, keyboard, &gameStatus);
 
-				if (keyboard->k.endedDown)
+				if (keyboard->escape.endedDown)
 				{
 					gameStatus.isRunning = false;
 				}
 
 				if (keyboard->one.endedDown)
 				{
-					D3DGoWindowed(&d3dResource);
+					if (D3DGoWindowed(&d3dResource))
+					{
+						OutputDebugStringA("going windowed\n");
+						for (uint32 cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
+						{
+							Cube* cube = cubes + cubeIndex;
+							if (cube)
+							{
+								CreateViewAndPerspective(cube->eye, cube->at, cube->up, &cube->renderData.constantBufferData, &d3dResource.backBufferDescription);
+							}
+						}
+					}
 				}
 
 				if (keyboard->two.endedDown)
 				{
-					D3DGoFullscreen(&d3dResource);
+					if (D3DGoFullscreen(&d3dResource))
+					{
+						OutputDebugStringA("going fullscreen\n");
+						for (uint32 cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
+						{
+							Cube* cube = cubes + cubeIndex;
+							if (cube)
+							{
+								CreateViewAndPerspective(cube->eye, cube->at, cube->up, &cube->renderData.constantBufferData, &d3dResource.backBufferDescription);
+							}
+						}
+					}
 				}
 
 				Vector4 backBufferColor = Vector4{ 0.f, 0.96f, 0.831f, 1.f }; // 0,245,212
@@ -372,14 +398,25 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				{
 					backBufferColor = Vector4{ 0.607f, 0.364f, 0.898f, 1.f }; // 155,93,229
 				}
+				D3DClearRenderTarget(&d3dResource, backBufferColor);
 
-				GameUpdate(mouse, keyboard, &gameStatus);
-				GameRender(&d3dResource);
-
-				D3DRenderAndPresent(&d3dResource, backBufferColor);		
+				// GameUpdate(mouse, keyboard, &gameStatus);
+				// GameRender(&d3dResource);
+ 
+ 				for (uint32 cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
+ 				{
+ 					Cube* cube = cubes + cubeIndex;
+ 					if (cube)
+ 					{
+ 						UpdateCube(cube, cubeIndex % 2 == 0 ? 20.f : -40.f, &gameStatus);
+ 						D3DRender(d3dResource.context, &cube->renderData);
+ 					}
+ 				}
+				
+				D3DPresent(d3dResource.dxgiSwapChain);
 			}
 		
-			D3DReleaseAll(&d3dResource);
+			D3DReleaseAllResources(&d3dResource);
 		}
 		else
 		{

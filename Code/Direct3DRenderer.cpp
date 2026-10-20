@@ -1,5 +1,25 @@
 #include "Direct3DRenderer.h"
 
+internal_link void
+CreateViewAndPerspective(DirectX::XMVECTOR eye, DirectX::XMVECTOR at,  DirectX::XMVECTOR up,
+						 ConstantBufferData* constantBufferData, D3D11_TEXTURE2D_DESC* backBuffer)
+{
+	// TODO: These can be in the same method for now because the camera is static
+	// if the camera were to move then the view would need to be updated every frame
+
+	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(eye, at, up);
+	view = DirectX::XMMatrixTranspose(view);
+	DirectX::XMStoreFloat4x4(&constantBufferData->view, view);
+
+	float aspectRatioX = backBuffer->Width / (float)backBuffer->Height;
+	float aspectRatioY = aspectRatioX < (16.f / 9.f) ? aspectRatioX / (16.f / 9.f) : 1.f;
+
+	float fov = 2.f * std::atan(std::tan(DirectX::XMConvertToRadians(70) * 0.5f) / aspectRatioY);
+	DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovRH(fov, aspectRatioX, 0.01f, 100.f);
+	projection = DirectX::XMMatrixTranspose(projection);
+	DirectX::XMStoreFloat4x4(&constantBufferData->projection, projection);
+}
+
 internal_link HRESULT
 D3DConfigureBackBuffer(D3DResource* d3dResource)
 {
@@ -134,7 +154,7 @@ D3DCreateSwapChain(D3DResource* d3dResource, HWND window)
 	return result;
 }
 
-internal_link void
+inline void
 D3DReleaseBackBuffer(D3DResource* d3dResource)
 {
 	d3dResource->renderTarget->Release();
@@ -144,7 +164,7 @@ D3DReleaseBackBuffer(D3DResource* d3dResource)
 	d3dResource->context->Flush();
 }
 
-internal_link void
+inline bool
 D3DGoFullscreen(D3DResource* d3dResource)
 {
 	BOOL isFullscreen;
@@ -161,10 +181,14 @@ D3DGoFullscreen(D3DResource* d3dResource)
 
 		result = D3DConfigureBackBuffer(d3dResource);
 		ASSERT_OK(result, "Unable to configure back buffer after Fullscreen attempt");
+
+		return true;
 	}
+
+	return false;
 }
 
-internal_link void
+inline bool
 D3DGoWindowed(D3DResource* d3dResource)
 {
 	BOOL isFullscreen;
@@ -181,11 +205,15 @@ D3DGoWindowed(D3DResource* d3dResource)
 
 		result = D3DConfigureBackBuffer(d3dResource);
 		ASSERT_OK(result, "Unable to configure back buffer after Fullscreen attempt");
+
+		return true;
 	}
+
+	return false;
 }
 
-internal_link void
-D3DRenderAndPresent(D3DResource* d3dResource, Vector4 color)
+inline void
+D3DClearRenderTarget(D3DResource* d3dResource, Vector4 color)
 {
 	ID3D11DeviceContext* context = d3dResource->context;
 	ID3D11RenderTargetView* renderTarget = d3dResource->renderTarget;
@@ -194,19 +222,60 @@ D3DRenderAndPresent(D3DResource* d3dResource, Vector4 color)
 	context->ClearRenderTargetView(renderTarget, color.e);
 	context->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
 	context->OMSetRenderTargets(1, &renderTarget, depthStencilView);
-
-	//
-	// TODO: Index and vertex buffers, and shaders here
-	//
-
-	// NOTE: Presenting with vsync enabled
-	d3dResource->dxgiSwapChain->Present(1, 0);
 }
 
 internal_link void
-D3DReleaseAll(D3DResource* d3dResource)
+D3DRender(ID3D11DeviceContext* context, RenderData* renderData)
 {
-	d3dResource->dxgiSwapChain->SetFullscreenState(FALSE, NULL);
+	//
+	// NOTE: Refresh constant buffers with data from update loop
+	//
+	context->UpdateSubresource(renderData->constantBuffer, 0, 0, &renderData->constantBufferData, 0, 0);
+
+	//
+	// NOTE: Input-Assembler (IA) stage
+	//
+	UINT stride = sizeof(VertexPositionColor);
+    UINT offset = 0;
+
+    context->IASetVertexBuffers(0, 1, &renderData->vertexBuffer, &stride, &offset);
+    context->IASetIndexBuffer(renderData->indexBuffer, DXGI_FORMAT_R16_UINT, 0);
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context->IASetInputLayout(renderData->inputLayout);
+
+    //
+    // NOTE: Vertex shader stage
+    //
+    context->VSSetShader(renderData->vertexShader, 0, 0);
+
+    //
+    // NOTE: Constant buffer data
+    //
+    context->VSSetConstantBuffers(0, 1, &renderData->constantBuffer);
+
+    //
+    // NOTE: Pixel shader stage
+    //
+    context->PSSetShader(renderData->pixelShader, 0, 0);
+
+    //
+    // NOTE: Do the actual draw
+    //
+    context->DrawIndexed(renderData->indexCount, 0, 0);
+}
+
+internal_link void
+D3DPresent(IDXGISwapChain* dxgiSwapChain)
+{
+	//
+	// NOTE: Presenting with vsync enabled
+	//
+	dxgiSwapChain->Present(1, 0);
+}
+
+internal_link void
+D3DReleaseAllResources(D3DResource* d3dResource)
+{
 	d3dResource->context->Flush();
 	d3dResource->renderTarget->Release();
 	d3dResource->depthStencilView->Release();
@@ -215,4 +284,206 @@ D3DReleaseAll(D3DResource* d3dResource)
 	d3dResource->context->Release();
 	d3dResource->device->Release();
 	d3dResource->dxgiSwapChain->Release();
+}
+
+//
+// NOTE: Cube methods
+//
+
+internal_link void
+CreateCube(ID3D11Device* device, Cube* cube, float size)
+{
+	VertexPositionColor verticies[] =
+	{
+		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(0.f, 0.f, 0.f)},
+		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},
+		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},
+		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(0.f, 1.f, 1.f)},
+
+		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},
+		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 0.f, 1.f)},
+		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 0.f)},
+		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+	};
+
+	CD3D11_BUFFER_DESC vertexBufferDescription(sizeof(verticies), D3D11_BIND_VERTEX_BUFFER);
+	
+	D3D11_SUBRESOURCE_DATA vertexData;
+	ZeroMemory(&vertexData, sizeof(D3D11_SUBRESOURCE_DATA));
+	vertexData.pSysMem = verticies;
+	vertexData.SysMemPitch = 0;
+	vertexData.SysMemSlicePitch = 0;
+
+	HRESULT result = device->CreateBuffer(&vertexBufferDescription, &vertexData, &cube->renderData.vertexBuffer);
+	if (FAILED(result))
+	{
+		OutputDebugStringA("Unable to create cube vertex buffer\n");
+	}
+
+	ushort indices[] =
+	{
+		0,2,1, // -x
+		1,2,3,
+
+		4,5,6, // +x
+		5,7,6,
+
+		0,1,5, // -y
+		0,5,4,
+
+		2,6,7, // +y
+		2,7,3,
+
+		0,4,6, // -z
+		0,6,2,
+
+		1,3,7, // +z
+		1,7,5,
+	};
+
+	cube->renderData.indexCount = ARRAYSIZE(indices);
+
+	CD3D11_BUFFER_DESC indexBufferDescription(sizeof(indices), D3D11_BIND_INDEX_BUFFER);
+
+	D3D11_SUBRESOURCE_DATA indexData;
+	ZeroMemory(&indexData, sizeof(D3D11_SUBRESOURCE_DATA));
+	indexData.pSysMem = indices;
+    indexData.SysMemPitch = 0;
+    indexData.SysMemSlicePitch = 0;
+
+    result = device->CreateBuffer(&indexBufferDescription, &indexData, &cube->renderData.indexBuffer);
+    if (FAILED(result))
+    {
+    	OutputDebugStringA("Unable to create cube index buffer\n");
+    }
+}
+
+internal_link void
+LoadCubeShaders(ID3D11Device* device, RenderData* renderData)
+{
+	sizet destSize = 4096;
+	sizet bytesRead = 0;
+
+	FILE* vertexShaderFile = {0};
+	FILE* pixelShaderFile = {0};
+	BYTE* bytes = new BYTE[destSize];
+
+	HRESULT result = S_OK;
+	errno_t openFileResult = 0;
+
+	//
+	// NOTE: Vertex shader file load
+	//
+	openFileResult = fopen_s(&vertexShaderFile, "CubeVertexShader.cso", "rb");
+	if (openFileResult == 0)
+	{
+		bytesRead = fread_s(bytes, destSize, 1, 4096, vertexShaderFile);
+
+		result = device->CreateVertexShader(bytes, bytesRead, nullptr, &renderData->vertexShader);
+		if (FAILED(result))
+		{
+			OutputDebugStringA("Unable to create vertex shader\n");
+		}
+	}
+
+	D3D11_INPUT_ELEMENT_DESC inputAssemblerDescription[] =
+	{
+	    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	};
+
+	result = device->CreateInputLayout(
+		inputAssemblerDescription, 
+		ARRAYSIZE(inputAssemblerDescription), 
+		bytes, 
+		bytesRead, 
+		&renderData->inputLayout
+	);
+	if (FAILED(result))
+	{
+		OutputDebugStringA("Unable to create input layout\n");
+	}
+
+	delete bytes;
+	bytes = new BYTE[destSize];
+	bytesRead = 0;
+
+	//
+	// NOTE: Pixel shader file load
+	//
+	openFileResult = fopen_s(&pixelShaderFile, "CubePixelShader.cso", "rb");
+	if (openFileResult == 0)
+	{
+		bytesRead = fread_s(bytes, destSize, 1, 4096, pixelShaderFile);
+
+		result = device->CreatePixelShader(bytes, bytesRead, 0, &renderData->pixelShader);
+		if (FAILED(result))
+		{
+			OutputDebugStringA("Unable to create pixel shader\n");
+		}
+	}
+
+	delete bytes;
+
+	CD3D11_BUFFER_DESC constantBufferDescription(sizeof(ConstantBufferData), D3D11_BIND_CONSTANT_BUFFER);
+	result = device->CreateBuffer(&constantBufferDescription, 0, &renderData->constantBuffer);
+	if (FAILED(result))
+	{
+		OutputDebugStringA("Unable to create constant buffer\n");
+	}
+
+	fclose(vertexShaderFile);
+	fclose(pixelShaderFile);
+}
+
+internal_link void
+UpdateCube(Cube* cube, float rotationSpeed, GameStatus* gameStatus)
+{
+	cube->rotation += rotationSpeed*gameStatus->deltaTime;
+	float angle = DirectX::XMConvertToRadians(cube->rotation);
+	
+	DirectX::XMMATRIX axisRotation = DirectX::XMMatrixRotationY(angle);
+	axisRotation = DirectX::XMMatrixTranspose(axisRotation);
+	DirectX::XMStoreFloat4x4(&cube->renderData.constantBufferData.world, axisRotation);
+}
+
+internal_link void
+CreateCubes(Cube cubes[4], ID3D11Device* device, D3D11_TEXTURE2D_DESC* backBufferDescription)
+{
+	Cube cube0 = {};
+	CreateCube(device, &cube0, 0.25f);
+	cube0.eye = DirectX::XMVectorSet(0.f, 0.5f, 2.f, 0.f);
+	cube0.at = DirectX::XMVectorSet(-1.f, 0.f, 0.f, 0.f);
+	cube0.up = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
+	CreateViewAndPerspective(cube0.eye, cube0.at, cube0.up, &cube0.renderData.constantBufferData, backBufferDescription);
+	LoadCubeShaders(device, &cube0.renderData);
+
+	Cube cube1 = {};
+	CreateCube(device, &cube1, 0.25f);
+	cube1.eye = DirectX::XMVectorSet(0.f, -0.5f, 2.f, 0.f);
+	cube1.at = DirectX::XMVectorSet(0.f, -0.8f, 0.f, 0.f);
+	cube1.up = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
+	CreateViewAndPerspective(cube1.eye, cube1.at, cube1.up, &cube1.renderData.constantBufferData, backBufferDescription);
+	LoadCubeShaders(device, &cube1.renderData);
+
+	Cube cube2 = {};
+	CreateCube(device, &cube2, 0.25f);
+	cube2.eye = DirectX::XMVectorSet(0.f, 0.5f, 2.f, 0.f);
+	cube2.at = DirectX::XMVectorSet(1.f, 0.f, 0.f, 0.f);
+	cube2.up = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
+	CreateViewAndPerspective(cube2.eye, cube2.at, cube2.up, &cube2.renderData.constantBufferData, backBufferDescription);
+	LoadCubeShaders(device, &cube2.renderData);
+
+	Cube cube3 = {};
+	CreateCube(device, &cube3, 0.25f);
+	cube3.eye = DirectX::XMVectorSet(0.f, 0.5f, 2.f, 0.f);
+	cube3.at = DirectX::XMVectorSet(0.f, 0.8f, 0.f, 0.f);
+	cube3.up = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
+	CreateViewAndPerspective(cube3.eye, cube3.at, cube3.up, &cube3.renderData.constantBufferData, backBufferDescription);
+	LoadCubeShaders(device, &cube3.renderData);
+
+	cubes[0] = cube0;
+	cubes[1] = cube1;
+	cubes[2] = cube2;
+	cubes[3] = cube3;
 }

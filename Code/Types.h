@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cassert>
+#include <cmath>
 #include <cstdio>  // NOTE: Really just for debug string printing
 
 //
@@ -22,7 +23,7 @@ typedef std::uint16_t uint16;
 typedef std::uint32_t uint32;
 typedef std::uint64_t uint64;
 typedef std::size_t sizet;
-
+typedef unsigned short ushort;
 typedef intptr_t intptr;
 typedef uintptr_t uintptr;
 
