@@ -101,6 +101,7 @@ struct GameInput
 struct GameStatus
 {
 	float deltaTime = {};
+	float totalTime = {};
 
 	// TODO: Covert these to flags?
 	bool isRunning = false;

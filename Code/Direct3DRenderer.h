@@ -16,6 +16,7 @@ struct ConstantBufferData
     DirectX::XMFLOAT4X4 world = {};
     DirectX::XMFLOAT4X4 view = {};
     DirectX::XMFLOAT4X4 projection = {};
+    DirectX::XMFLOAT4 colorModulation = {};
 };
 static_assert((sizeof(ConstantBufferData) % 16) == 0, "ConstantBufferData size must be 16-byte aligned");
 
@@ -29,6 +30,11 @@ struct RenderData
     ID3D11VertexShader* vertexShader = {0};
     ID3D11PixelShader* pixelShader = {0};
     ID3D11InputLayout* inputLayout = {0};
+};
+
+struct ConvexPolygon
+{
+    RenderData renderData = {};
 };
 
 struct Cube
@@ -56,6 +62,8 @@ struct D3DResource
 
     ID3D11Texture2D* depthStencil = {0};
     ID3D11DepthStencilView* depthStencilView = {0};
+
+    ID3D11RasterizerState* rasterizerState = {0};
 };
 
 #endif // DIRECTX_H

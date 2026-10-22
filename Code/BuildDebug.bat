@@ -30,13 +30,10 @@ del lock.tmp
 REM Compile shaders
 set fxc="C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe"
 set ShaderDir=C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Data\
-set VertexShaderSrc="%ShaderDir%CubeVertexShader.hlsl"
-set VertexShaderOut="%ShaderDir%CubeVertexShader.cso"
-set PixelShaderSrc="%ShaderDir%CubePixelShader.hlsl"
-set PixelShaderOut="%ShaderDir%CubePixelShader.cso"
 
-%fxc% /Fo %VertexShaderOut% /T vs_5_0 %VertexShaderSrc%
-%fxc% /Fo %PixelShaderOut% /T ps_5_0 %PixelShaderSrc%
+%fxc% /Fo "%ShaderDir%BasicOrthographicVertexShader.cso" /T vs_5_0 "%ShaderDir%BasicOrthographicVertexShader.hlsl"
+%fxc% /Fo "%ShaderDir%BasicPerspectiveVertexShader.cso" /T vs_5_0 "%ShaderDir%BasicPerspectiveVertexShader.hlsl"
+%fxc% /Fo "%ShaderDir%BasicPixelShader.cso" /T ps_5_0 "%ShaderDir%BasicPixelShader.hlsl"
 
 cl %CommonCompilerFlags% "C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Code\Win32Main.cpp" -FmDonkeyKong3D.map -link -subsystem:windows -out:"Donkey Kong 3D.exe" %CommonLinkerFlags%
 

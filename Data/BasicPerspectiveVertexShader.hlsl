@@ -3,6 +3,7 @@ cbuffer ModelViewProjectionConstantBuffer : register(b0)
     matrix world;
     matrix view;
     matrix projection;
+    matrix colorModulation;
 };
 
 struct VertexShaderInput

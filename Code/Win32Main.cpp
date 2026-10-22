@@ -263,7 +263,7 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 		case WM_XBUTTONUP:
 		case WM_XBUTTONDOWN:
 		{
-			assert(!"Mouse event came through in a non dispatch method!");
+			// assert(!"Mouse event came through in a non dispatch method!");
 		} break;
 
 		// Keyboard input key DOWN
@@ -272,7 +272,7 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 		case WM_SYSKEYUP:
 		case WM_KEYUP:
 		{
-			assert(!"Keyboard input came through in a non dispatch method!");
+			// assert(!"Keyboard input came through in a non dispatch method!");
 		} break;
 
 		// Every other unhandled message, there is a lot
@@ -334,10 +334,14 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			Cube cubes[4] = {0};
 			CreateCubes(cubes, d3dResource.device, &d3dResource.backBufferDescription);
 
+			ConvexPolygon polygon = {};
+			CreateTriangle(d3dResource.device, &polygon, &d3dResource.backBufferDescription);
+
 			while (gameStatus.isRunning)
 			{
 				QueryPerformanceCounter(&currentFrameTime);
 				gameStatus.deltaTime = ((float)(currentFrameTime.QuadPart - perviousFrameTime.QuadPart) / (float)frequency.QuadPart);
+				gameStatus.totalTime += gameStatus.deltaTime;
 				perviousFrameTime = currentFrameTime;
 
 				GameMouseInput* mouse = &input.mouse;
@@ -347,6 +351,16 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				if (keyboard->escape.endedDown)
 				{
 					gameStatus.isRunning = false;
+				}
+
+				if (keyboard->k.endedDown)
+				{
+					D3DSetRasterizerWireframeMode(&d3dResource);
+				}
+
+				if (keyboard->m.endedDown)
+				{
+					D3DSetRasterizerSolidMode(&d3dResource);
 				}
 
 				if (keyboard->one.endedDown)
@@ -362,6 +376,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 								CreateViewAndPerspective(cube->eye, cube->at, cube->up, &cube->renderData.constantBufferData, &d3dResource.backBufferDescription);
 							}
 						}
+						CreateOrthograhpicView(&polygon.renderData.constantBufferData, &d3dResource.backBufferDescription);
 					}
 				}
 
@@ -378,6 +393,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 								CreateViewAndPerspective(cube->eye, cube->at, cube->up, &cube->renderData.constantBufferData, &d3dResource.backBufferDescription);
 							}
 						}
+						CreateOrthograhpicView(&polygon.renderData.constantBufferData, &d3dResource.backBufferDescription);
 					}
 				}
 
@@ -412,6 +428,9 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
  						D3DRender(d3dResource.context, &cube->renderData);
  					}
  				}
+ 				
+ 				UpdateTriangle(&polygon, &gameStatus);
+				D3DRender(d3dResource.context, &polygon.renderData);
 				
 				D3DPresent(d3dResource.dxgiSwapChain);
 			}
