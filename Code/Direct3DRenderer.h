@@ -9,6 +9,7 @@ struct VertexPositionColor
 {
     DirectX::XMFLOAT3 position = {};
     DirectX::XMFLOAT3 color = {};
+    DirectX::XMFLOAT2 texCoord = {};
 };
 
 struct ConstantBufferData
@@ -22,7 +23,7 @@ static_assert((sizeof(ConstantBufferData) % 16) == 0, "ConstantBufferData size m
 
 struct RenderData
 {
-    uint32 indexCount = {};
+    int indexCount = {};
     ID3D11Buffer* vertexBuffer = {0};
     ID3D11Buffer* indexBuffer = {0};
     ID3D11Buffer* constantBuffer = {0};
@@ -32,9 +33,20 @@ struct RenderData
     ID3D11InputLayout* inputLayout = {0};
 };
 
+struct Texture2D
+{
+    int width = {};
+    int height = {}; 
+    int numberOfColorChannels = {};
+    ID3D11Texture2D* source = {0};
+    ID3D11ShaderResourceView* view = {0};
+    ID3D11SamplerState* sampler = {0};
+};
+
 struct ConvexPolygon
 {
     RenderData renderData = {};
+    Texture2D texture = {};
 };
 
 struct Cube

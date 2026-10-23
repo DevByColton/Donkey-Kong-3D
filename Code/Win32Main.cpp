@@ -108,8 +108,8 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 			{
 				WPARAM virtualKeyCode = message.wParam;
 				
-				int32 wasDown = ((message.lParam & (1 << 30)) != 0);
-				int32 isDown = ((message.lParam & (1 << 31)) == 0);
+				int wasDown = ((message.lParam & (1 << 30)) != 0);
+				int isDown = ((message.lParam & (1 << 31)) == 0);
 
 				// NOTE: If I ever want to split these out
 				//       Win32 held delay keeps this from being reliable
@@ -194,7 +194,7 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 					}
 
 					// Hard kill, handle alt F4
-					int32 altKeyWasDown = ((message.lParam & (1 << 29)) != 0);
+					int altKeyWasDown = ((message.lParam & (1 << 29)) != 0);
 					if ((virtualKeyCode == VK_F4) && altKeyWasDown)
 					{
 						gameStatus->isRunning = false;
@@ -335,7 +335,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			CreateCubes(cubes, d3dResource.device, &d3dResource.backBufferDescription);
 
 			ConvexPolygon polygon = {};
-			CreateTriangle(d3dResource.device, &polygon, &d3dResource.backBufferDescription);
+			CreatePolygon(d3dResource.device, &polygon, &d3dResource.backBufferDescription);
 
 			while (gameStatus.isRunning)
 			{
@@ -368,7 +368,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 					if (D3DGoWindowed(&d3dResource))
 					{
 						OutputDebugStringA("going windowed\n");
-						for (uint32 cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
+						for (int cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
 						{
 							Cube* cube = cubes + cubeIndex;
 							if (cube)
@@ -385,7 +385,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 					if (D3DGoFullscreen(&d3dResource))
 					{
 						OutputDebugStringA("going fullscreen\n");
-						for (uint32 cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
+						for (int cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
 						{
 							Cube* cube = cubes + cubeIndex;
 							if (cube)
@@ -419,7 +419,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				// GameUpdate(mouse, keyboard, &gameStatus);
 				// GameRender(&d3dResource);
  
- 				for (uint32 cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
+ 				for (int cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
  				{
  					Cube* cube = cubes + cubeIndex;
  					if (cube)
@@ -429,8 +429,8 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
  					}
  				}
  				
- 				UpdateTriangle(&polygon, &gameStatus);
-				D3DRender(d3dResource.context, &polygon.renderData);
+ 				UpdatePolygon(&polygon, &gameStatus);
+				D3DRender(d3dResource.context, &polygon.renderData, &polygon.texture);
 				
 				D3DPresent(d3dResource.dxgiSwapChain);
 			}

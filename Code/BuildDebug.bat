@@ -34,6 +34,7 @@ set ShaderDir=C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Data\
 %fxc% /Fo "%ShaderDir%BasicOrthographicVertexShader.cso" /T vs_5_0 "%ShaderDir%BasicOrthographicVertexShader.hlsl"
 %fxc% /Fo "%ShaderDir%BasicPerspectiveVertexShader.cso" /T vs_5_0 "%ShaderDir%BasicPerspectiveVertexShader.hlsl"
 %fxc% /Fo "%ShaderDir%BasicPixelShader.cso" /T ps_5_0 "%ShaderDir%BasicPixelShader.hlsl"
+%fxc% /Fo "%ShaderDir%BasicTexturePixelShader.cso" /T ps_5_0 "%ShaderDir%BasicTexturePixelShader.hlsl"
 
 cl %CommonCompilerFlags% "C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Code\Win32Main.cpp" -FmDonkeyKong3D.map -link -subsystem:windows -out:"Donkey Kong 3D.exe" %CommonLinkerFlags%
 

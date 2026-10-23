@@ -3,17 +3,18 @@
 internal_link void
 CreateOrthograhpicView(ConstantBufferData* constantBufferData, D3D11_TEXTURE2D_DESC* backBuffer)
 {
-	DirectX::XMMATRIX view = DirectX::XMMatrixIdentity();
-	view = DirectX::XMMatrixTranspose(view);
-	DirectX::XMStoreFloat4x4(&constantBufferData->view, view);
+	DirectX::XMStoreFloat4x4(&constantBufferData->world, DirectX::XMMatrixIdentity());
+	DirectX::XMStoreFloat4x4(&constantBufferData->view, DirectX::XMMatrixIdentity());
 
+	float viewportWidth = (float)backBuffer->Width;
+	float viewportHeight = (float)backBuffer->Height;
+	float aspectRatio = viewportWidth / viewportHeight;
 	DirectX::XMMATRIX projection = DirectX::XMMatrixOrthographicRH(
-		1.f,
-		1.f,
+		2.f*aspectRatio,
+		2.f,
 		0.01f,   // near plane
 		100.f    // far plane
 	);
-	projection = DirectX::XMMatrixTranspose(projection);
 	DirectX::XMStoreFloat4x4(&constantBufferData->projection, projection);
 }
 
@@ -274,7 +275,7 @@ D3DClearRenderTarget(D3DResource* d3dResource, Vector4 color)
 }
 
 internal_link void
-D3DRender(ID3D11DeviceContext* context, RenderData* renderData)
+D3DRender(ID3D11DeviceContext* context, RenderData* renderData, Texture2D* texture = 0)
 {
 	//
 	// NOTE: Refresh constant buffers with data from update loop
@@ -306,6 +307,11 @@ D3DRender(ID3D11DeviceContext* context, RenderData* renderData)
     // NOTE: Pixel shader stage
     //
     context->PSSetShader(renderData->pixelShader, 0, 0);
+    if (texture)
+    {
+    	context->PSSetShaderResources(0, 1, &texture->view);
+    	context->PSSetSamplers(0, 1, &texture->sampler); 
+    }
 
     //
     // NOTE: Do the actual draw
@@ -335,12 +341,8 @@ D3DReleaseAllResources(D3DResource* d3dResource)
 	d3dResource->dxgiSwapChain->Release();
 }
 
-//
-// NOTE: Cube methods
-//
-
 inline void
-CreateVertexBuffer(ID3D11Device* device, VertexPositionColor verticies[], uint32 vertexCount, RenderData* renderData)
+CreateVertexBuffer(ID3D11Device* device, VertexPositionColor verticies[], int vertexCount, RenderData* renderData)
 {
 	CD3D11_BUFFER_DESC vertexBufferDescription(sizeof(VertexPositionColor) * vertexCount, D3D11_BIND_VERTEX_BUFFER);
 	
@@ -358,11 +360,11 @@ CreateVertexBuffer(ID3D11Device* device, VertexPositionColor verticies[], uint32
 }
 
 inline void
-CreateIndexBuffer(ID3D11Device* device, ushort indices[], uint32 indexCount, RenderData* renderData)
+CreateIndexBuffer(ID3D11Device* device, unsigned short indices[], int indexCount, RenderData* renderData)
 {
 	renderData->indexCount = indexCount;
 
-	CD3D11_BUFFER_DESC indexBufferDescription(sizeof(ushort) * indexCount, D3D11_BIND_INDEX_BUFFER);
+	CD3D11_BUFFER_DESC indexBufferDescription(sizeof(unsigned short) * indexCount, D3D11_BIND_INDEX_BUFFER);
 
 	D3D11_SUBRESOURCE_DATA indexData;
 	ZeroMemory(&indexData, sizeof(D3D11_SUBRESOURCE_DATA));
@@ -380,8 +382,8 @@ CreateIndexBuffer(ID3D11Device* device, ushort indices[], uint32 indexCount, Ren
 internal_link void
 LoadShaders(ID3D11Device* device, RenderData* renderData, const char* vertexShaderFilename, const char* pixelShaderFilename)
 {
-	sizet destSize = 4096;
-	sizet bytesRead = 0;
+	size_t destSize = 4096;
+	size_t bytesRead = 0;
 
 	FILE* vertexShaderFile = {0};
 	FILE* pixelShaderFile = {0};
@@ -413,6 +415,7 @@ LoadShaders(ID3D11Device* device, RenderData* renderData, const char* vertexShad
 		{
 		    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		    { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 		};
 
 		result = device->CreateInputLayout(
@@ -465,8 +468,78 @@ LoadShaders(ID3D11Device* device, RenderData* renderData, const char* vertexShad
 	fclose(pixelShaderFile);
 }
 
+internal_link void
+GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* textureFileName)
+{
+	// NOTE: Load 4 channels RGBA becuase we are using DXGI_FORMAT_R8G8B8A8_UNORM
+	unsigned char* stbLoadData = stbi_load(textureFileName, &texture->width, &texture->height, &texture->numberOfColorChannels, 4);
+	
+	if (stbLoadData)
+	{
+		//
+		// NOTE: Create the texture 2D
+		//
+		D3D11_TEXTURE2D_DESC textureDescription = {};
+		textureDescription.Width = texture->width;
+		textureDescription.Height = texture->height;
+		textureDescription.ArraySize = 1;
+		textureDescription.MipLevels = 1;
+		textureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		textureDescription.SampleDesc.Count = 1;
+		textureDescription.SampleDesc.Quality = 0;
+		textureDescription.Usage = D3D11_USAGE_DEFAULT;
+		textureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		textureDescription.CPUAccessFlags = 0;
+		textureDescription.MiscFlags = 0;
+
+		D3D11_SUBRESOURCE_DATA textureData;
+		ZeroMemory(&textureData, sizeof(D3D11_SUBRESOURCE_DATA));
+		textureData.pSysMem = stbLoadData;
+		textureData.SysMemPitch = texture->width * 4;  // 4 bytes per pixel for R8G8B8A8;
+		textureData.SysMemSlicePitch = 0;
+
+		HRESULT result = device->CreateTexture2D(&textureDescription, &textureData, &texture->source);
+		ASSERT_OK(result, "Unable to create texture 2D");
+
+		//
+		// NOTE: Creat the shader resource
+		//
+		D3D11_SHADER_RESOURCE_VIEW_DESC resourceDescription = {};
+		resourceDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		resourceDescription.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		resourceDescription.Texture2D.MostDetailedMip = 0;
+		resourceDescription.Texture2D.MipLevels = 1;
+
+		result = device->CreateShaderResourceView(texture->source, &resourceDescription, &texture->view);
+		ASSERT_OK(result, "Unable to create shader resource");
+
+		//
+		// NOTE: Create the sampler state
+		//
+		D3D11_SAMPLER_DESC samplerDescription = {};
+		samplerDescription.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+		samplerDescription.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		samplerDescription.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		samplerDescription.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+		samplerDescription.ComparisonFunc = D3D11_COMPARISON_NEVER;
+		samplerDescription.MinLOD = 0.f;
+		samplerDescription.MaxLOD = D3D11_FLOAT32_MAX;
+
+		result = device->CreateSamplerState(&samplerDescription, &texture->sampler);
+		ASSERT_OK(result, "Unable to create shader sample state");
+
+		stbi_image_free(stbLoadData);
+	}
+	else
+	{
+		OutputDebugStringA("Unable to load texture: ");
+		OutputDebugStringA(textureFileName);
+		OutputDebugStringA("\n");
+	}
+}
+
 inline void
-UpdateTriangle(ConvexPolygon* polygon, GameStatus* gameStatus)
+UpdatePolygon(ConvexPolygon* polygon, GameStatus* gameStatus)
 {
 	// NOTE: Just modulating the green channel to show change
 	polygon->renderData.constantBufferData.colorModulation.x = 1.f;
@@ -487,41 +560,27 @@ UpdateCube(Cube* cube, float rotationSpeed, GameStatus* gameStatus)
 }
 
 internal_link void
-CreateTriangle(ID3D11Device* device, ConvexPolygon* polygon, D3D11_TEXTURE2D_DESC* backBufferDescription)
-{
-#if 0	
+CreatePolygon(ID3D11Device* device, ConvexPolygon* polygon, D3D11_TEXTURE2D_DESC* backBufferDescription)
+{	
 	VertexPositionColor verticies[] =
 	{
-		{DirectX::XMFLOAT3(-0.5, -0.5f, 0.f), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f, 0.f), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},
-		{DirectX::XMFLOAT3(0.f, 0.5f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},
+		{DirectX::XMFLOAT3(0.5, 0.5f, 0.f), DirectX::XMFLOAT3(1.f, 0.f, 0.f), DirectX::XMFLOAT2(1.f, 0.f)},
+		{DirectX::XMFLOAT3(0.5f, -0.5f, 0.f), DirectX::XMFLOAT3(0.f, 1.f, 0.f), DirectX::XMFLOAT2(1.f, 1.f)},
+		{DirectX::XMFLOAT3(-0.5f, -0.5f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+		{DirectX::XMFLOAT3(-0.5f, 0.5f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 0.f), DirectX::XMFLOAT2(0.f, 0.f)},
 	};
 
-	ushort indices[] = 
+	unsigned short indices[] = 
 	{
-		0, 2, 1
+		0, 1, 2,
+		0, 2, 3,
 	};
-#else
-	VertexPositionColor verticies[] =
-	{
-		{DirectX::XMFLOAT3(0.5, 0.5f, 0.f), DirectX::XMFLOAT3(0.443f, 0.404f, 0.482f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f, 0.f), DirectX::XMFLOAT3(0.659f, 0.624f, 0.592f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f, 0.f), DirectX::XMFLOAT3(0.843f, 0.659f, 0.494f)},
-		{DirectX::XMFLOAT3(-0.5f, 0.5f, 0.f), DirectX::XMFLOAT3(0.565f, 0.369f, 0.373f)},
-	};
-
-	ushort indices[] = 
-	{
-		1, 2, 3,
-		3, 0, 1
-	};
-#endif	
 
 	CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &polygon->renderData);
 	CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &polygon->renderData);
-
 	CreateOrthograhpicView(&polygon->renderData.constantBufferData, backBufferDescription);
-	LoadShaders(device, &polygon->renderData, "BasicOrthographicVertexShader.cso", "BasicPixelShader.cso");
+	LoadShaders(device, &polygon->renderData, "BasicOrthographicVertexShader.cso", "BasicTexturePixelShader.cso");
+	GenerateTexture(device, &polygon->texture, "WoodContainer.jpg");
 }
 
 internal_link void
@@ -540,7 +599,7 @@ CreateCube(ID3D11Device* device, Cube* cube, float size)
 		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
 	};
 
-	ushort indices[] =
+	unsigned short indices[] =
 	{
 		0,2,1, // -x
 		1,2,3,

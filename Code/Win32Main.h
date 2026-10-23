@@ -4,6 +4,10 @@
 #include <Windows.h>
 #include <Xinput.h>
 #include <xaudio2.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include "Game.h"
 
 #define WM_APP_SIZE (WM_APP + 1)
