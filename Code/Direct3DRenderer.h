@@ -41,6 +41,7 @@ struct Texture2D
     ID3D11Texture2D* source = {0};
     ID3D11ShaderResourceView* view = {0};
     ID3D11SamplerState* sampler = {0};
+    ID3D11BlendState* blend = {0};
 };
 
 struct ConvexPolygon

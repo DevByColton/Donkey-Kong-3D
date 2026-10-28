@@ -310,7 +310,8 @@ D3DRender(ID3D11DeviceContext* context, RenderData* renderData, Texture2D* textu
     if (texture)
     {
     	context->PSSetShaderResources(0, 1, &texture->view);
-    	context->PSSetSamplers(0, 1, &texture->sampler); 
+    	context->PSSetSamplers(0, 1, &texture->sampler);
+    	context->OMSetBlendState(texture->blend, NULL, 0xFFFFFFFF);
     }
 
     //
@@ -469,73 +470,106 @@ LoadShaders(ID3D11Device* device, RenderData* renderData, const char* vertexShad
 }
 
 internal_link void
-GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* textureFileName)
+GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1FileName, const char* texture2FileName)
 {
 	// NOTE: Load 4 channels RGBA becuase we are using DXGI_FORMAT_R8G8B8A8_UNORM
-	unsigned char* stbLoadData = stbi_load(textureFileName, &texture->width, &texture->height, &texture->numberOfColorChannels, 4);
-	
-	if (stbLoadData)
+	unsigned char* stbTexture1Data = stbi_load(texture1FileName, &texture->width, &texture->height, &texture->numberOfColorChannels, 4);
+	if (!stbTexture1Data)
 	{
-		//
-		// NOTE: Create the texture 2D
-		//
-		D3D11_TEXTURE2D_DESC textureDescription = {};
-		textureDescription.Width = texture->width;
-		textureDescription.Height = texture->height;
-		textureDescription.ArraySize = 1;
-		textureDescription.MipLevels = 1;
-		textureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		textureDescription.SampleDesc.Count = 1;
-		textureDescription.SampleDesc.Quality = 0;
-		textureDescription.Usage = D3D11_USAGE_DEFAULT;
-		textureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		textureDescription.CPUAccessFlags = 0;
-		textureDescription.MiscFlags = 0;
-
-		D3D11_SUBRESOURCE_DATA textureData;
-		ZeroMemory(&textureData, sizeof(D3D11_SUBRESOURCE_DATA));
-		textureData.pSysMem = stbLoadData;
-		textureData.SysMemPitch = texture->width * 4;  // 4 bytes per pixel for R8G8B8A8;
-		textureData.SysMemSlicePitch = 0;
-
-		HRESULT result = device->CreateTexture2D(&textureDescription, &textureData, &texture->source);
-		ASSERT_OK(result, "Unable to create texture 2D");
-
-		//
-		// NOTE: Creat the shader resource
-		//
-		D3D11_SHADER_RESOURCE_VIEW_DESC resourceDescription = {};
-		resourceDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		resourceDescription.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		resourceDescription.Texture2D.MostDetailedMip = 0;
-		resourceDescription.Texture2D.MipLevels = 1;
-
-		result = device->CreateShaderResourceView(texture->source, &resourceDescription, &texture->view);
-		ASSERT_OK(result, "Unable to create shader resource");
-
-		//
-		// NOTE: Create the sampler state
-		//
-		D3D11_SAMPLER_DESC samplerDescription = {};
-		samplerDescription.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
-		samplerDescription.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-		samplerDescription.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-		samplerDescription.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-		samplerDescription.ComparisonFunc = D3D11_COMPARISON_NEVER;
-		samplerDescription.MinLOD = 0.f;
-		samplerDescription.MaxLOD = D3D11_FLOAT32_MAX;
-
-		result = device->CreateSamplerState(&samplerDescription, &texture->sampler);
-		ASSERT_OK(result, "Unable to create shader sample state");
-
-		stbi_image_free(stbLoadData);
-	}
-	else
-	{
-		OutputDebugStringA("Unable to load texture: ");
-		OutputDebugStringA(textureFileName);
+		OutputDebugStringA("Unable to load image: ");
+		OutputDebugStringA(texture1FileName);
 		OutputDebugStringA("\n");
+		return;
 	}
+
+	// TODO: This call to load is going to overwirte texture width and height, which is fine because I am using a texture 2D array
+	// so the width and hieght of these need to be the same anyway. Just might want to add validation of some sort
+	unsigned char* stbTexture2Data = stbi_load(texture2FileName, &texture->width, &texture->height, &texture->numberOfColorChannels, 4);
+	if (!stbTexture2Data)
+	{
+		OutputDebugStringA("Unable to load image: ");
+		OutputDebugStringA(texture2FileName);
+		OutputDebugStringA("\n");
+		return;
+	}
+
+	//
+	// NOTE: Create the texture 2D
+	//
+	D3D11_TEXTURE2D_DESC textureDescription = {};
+	textureDescription.Width = texture->width;
+	textureDescription.Height = texture->height;
+	textureDescription.ArraySize = 2;
+	textureDescription.MipLevels = 1;
+	textureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	textureDescription.SampleDesc.Count = 1;
+	textureDescription.SampleDesc.Quality = 0;
+	textureDescription.Usage = D3D11_USAGE_DEFAULT;
+	textureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	textureDescription.CPUAccessFlags = 0;
+	textureDescription.MiscFlags = 0;
+
+	int rowPitch = texture->width * 4;
+
+	D3D11_SUBRESOURCE_DATA textureData[2];
+	ZeroMemory(&textureData, sizeof(D3D11_SUBRESOURCE_DATA));
+	textureData[0].pSysMem = stbTexture1Data;
+	textureData[0].SysMemPitch = rowPitch;
+	textureData[0].SysMemSlicePitch = 0;
+	textureData[1].pSysMem = stbTexture2Data;
+	textureData[1].SysMemPitch = rowPitch;
+	textureData[1].SysMemSlicePitch = 0;
+
+	HRESULT result = device->CreateTexture2D(&textureDescription, textureData, &texture->source);
+	ASSERT_OK(result, "Unable to create texture 2D");
+
+	//
+	// NOTE: Creat the shader resource
+	//
+	D3D11_SHADER_RESOURCE_VIEW_DESC resourceDescription = {};
+	resourceDescription.Format = textureDescription.Format;
+	resourceDescription.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+	resourceDescription.Texture2DArray.MostDetailedMip = 0;
+	resourceDescription.Texture2DArray.MipLevels = 1;
+	resourceDescription.Texture2DArray.FirstArraySlice = 0;
+	resourceDescription.Texture2DArray.ArraySize = textureDescription.ArraySize;
+
+	result = device->CreateShaderResourceView(texture->source, &resourceDescription, &texture->view);
+	ASSERT_OK(result, "Unable to create shader resource");
+
+	//
+	// NOTE: Create the sampler state
+	//
+	D3D11_SAMPLER_DESC samplerDescription = {};
+	samplerDescription.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+	samplerDescription.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDescription.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDescription.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDescription.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	samplerDescription.MinLOD = 0.f;
+	samplerDescription.MaxLOD = D3D11_FLOAT32_MAX;
+
+	result = device->CreateSamplerState(&samplerDescription, &texture->sampler);
+	ASSERT_OK(result, "Unable to create shader sample state");
+
+	//
+	// NOTE: Create the blend state
+	//
+	D3D11_BLEND_DESC blendDescription = {};
+	blendDescription.RenderTarget[0].BlendEnable = TRUE;
+	blendDescription.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+	blendDescription.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	blendDescription.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blendDescription.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	blendDescription.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+	blendDescription.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blendDescription.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+	result = device->CreateBlendState(&blendDescription, &texture->blend);
+	ASSERT_OK(result, "Unable to create blend description");
+
+	stbi_image_free(stbTexture1Data);
+	stbi_image_free(stbTexture2Data);
 }
 
 inline void
@@ -580,7 +614,7 @@ CreatePolygon(ID3D11Device* device, ConvexPolygon* polygon, D3D11_TEXTURE2D_DESC
 	CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &polygon->renderData);
 	CreateOrthograhpicView(&polygon->renderData.constantBufferData, backBufferDescription);
 	LoadShaders(device, &polygon->renderData, "BasicOrthographicVertexShader.cso", "BasicTexturePixelShader.cso");
-	GenerateTexture(device, &polygon->texture, "WoodContainer.jpg");
+	GenerateTexture(device, &polygon->texture, "WoodContainer.jpg", "AwesomeFace.png");
 }
 
 internal_link void
