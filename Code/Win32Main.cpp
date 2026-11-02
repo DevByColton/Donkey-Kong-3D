@@ -1,6 +1,5 @@
 #include "Win32Main.h"
 #include "Direct3DRenderer.cpp"
-#include "Game.cpp"
 
 internal_link void
 Win32ProcessButtonMessage(GameButton* newState, bool isDown)
@@ -12,7 +11,7 @@ Win32ProcessButtonMessage(GameButton* newState, bool isDown)
 }
 
 internal_link void
-Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInput* mouse, GameControllerInput* keyboardController, GameStatus* gameStatus)
+Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInput* mouse, GameControllerInput* keyboardController, GameState* gameState)
 {
 	MSG message = {};
 
@@ -23,22 +22,25 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 			// When the window is resized
 			case WM_APP_SIZE:
 			{
-				// TODO: This isn't working super properly when handling resizing
-				// it doesnt seem to get picked up here when manually resizing
-				// Maybe because its firing so many times??
-				OutputDebugStringA("Window was resized \n");
+				OutputDebugStringA("IN WM_APP_SIZE\n");
+				if (!isWindowResizing)
+				{
+					isWindowResizing = true;
+					ResizeBackBuffer(d3dResource);
+					OutputDebugStringA("DONE WM_APP_SIZE\n\n");
+				}
 			} break;
 
 			// When the window is closed
 			case WM_APP_CLOSE:
 			{
-				gameStatus->isRunning = false;
+				gameState->isRunning = false;
 			} break;
 
 			// When windows delets this window
 			case WM_APP_DESTROY:
 			{
-				gameStatus->isRunning = false;
+				gameState->isRunning = false;
 			} break;
 
 			// When the window active state changes, focused or unfocused
@@ -197,7 +199,7 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 					int altKeyWasDown = ((message.lParam & (1 << 29)) != 0);
 					if ((virtualKeyCode == VK_F4) && altKeyWasDown)
 					{
-						gameStatus->isRunning = false;
+						gameState->isRunning = false;
 					}
 
 					// Standard windows keys to full screen
@@ -275,6 +277,30 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 			// assert(!"Keyboard input came through in a non dispatch method!");
 		} break;
 
+		case WM_SYSCOMMAND:
+		{
+			if ((wParam & 0xFFF0) == SC_MOVE)
+			{
+				// NOTE: When the window moves, nothing do for now
+			    OutputDebugStringA("SC_MOVE\n");
+			}
+			else if ((wParam & 0xFFF0) == SC_SIZE)
+			{
+				PostMessageA(window, WM_APP_SIZE, wParam, lParam);
+				OutputDebugStringA("SC_SIZE\n");
+			}
+			else if ((wParam & 0xFFF0) == SC_MAXIMIZE)
+			{
+				PostMessageA(window, WM_APP_SIZE, wParam, lParam);
+				OutputDebugStringA("SC_MAXIMIZE\n");
+			}
+			else if ((wParam & 0xFFF0) == SC_MINIMIZE)
+			{
+				PostMessageA(window, WM_APP_SIZE, wParam, lParam);
+				OutputDebugStringA("SC_MINIMIZE\n");
+			}
+		};
+
 		// Every other unhandled message, there is a lot
 		default:
 		{
@@ -327,30 +353,43 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			QueryPerformanceCounter(&perviousFrameTime);
 
 			GameInput input = {};
-			GameStatus gameStatus = {};
-			gameStatus.isRunning = true;
+			GameState gameState = {};
+			gameState.isRunning = true;
 
-			// NOTE: Testing geometry
-			Cube cubes[4] = {0};
-			CreateCubes(cubes, d3dResource.device, &d3dResource.backBufferDescription);
+			Cube cube = {};
+			CreateCube(d3dResource.device, &cube, 3.f);
+			Transform cubeTransforms[] = 
+			{
+				{DirectX::XMFLOAT3(0.f, 0.f, -18.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(20.f, -10.5f, -22.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(-12.f, -5.5f, -16.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(26.f, 16.f, -42.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(-32.f, 19.f, -66.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(-28.3f, 15.f, -29.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(50.f, 0.f, -90.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+			};
 
-			ConvexPolygon polygon = {};
-			CreatePolygon(d3dResource.device, &polygon, &d3dResource.backBufferDescription);
+			Sprite sprite = {};
+			CreateSprite(d3dResource.device, &sprite);
+			ScaleUniform(&sprite.transform, 0.5f);
 
-			while (gameStatus.isRunning)
+			while (gameState.isRunning)
 			{
 				QueryPerformanceCounter(&currentFrameTime);
-				gameStatus.deltaTime = ((float)(currentFrameTime.QuadPart - perviousFrameTime.QuadPart) / (float)frequency.QuadPart);
-				gameStatus.totalTime += gameStatus.deltaTime;
+				gameState.deltaTime = ((float)(currentFrameTime.QuadPart - perviousFrameTime.QuadPart) / (float)frequency.QuadPart);
+				gameState.totalTime += gameState.deltaTime;
 				perviousFrameTime = currentFrameTime;
 
+				//
+				// NOTE: Handle input
+				//
 				GameMouseInput* mouse = &input.mouse;
 				GameControllerInput* keyboard = &input.controllers[0];
-				Win32ProcessPendingMessages(window, &d3dResource, mouse, keyboard, &gameStatus);
+				Win32ProcessPendingMessages(window, &d3dResource, mouse, keyboard, &gameState);
 
 				if (keyboard->escape.endedDown)
 				{
-					gameStatus.isRunning = false;
+					gameState.isRunning = false;
 				}
 
 				if (keyboard->k.endedDown)
@@ -365,36 +404,12 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 
 				if (keyboard->one.endedDown)
 				{
-					if (D3DGoWindowed(&d3dResource))
-					{
-						OutputDebugStringA("going windowed\n");
-						for (int cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
-						{
-							Cube* cube = cubes + cubeIndex;
-							if (cube)
-							{
-								CreateViewAndPerspective(cube->eye, cube->at, cube->up, &cube->renderData.constantBufferData, &d3dResource.backBufferDescription);
-							}
-						}
-						CreateOrthograhpicView(&polygon.renderData.constantBufferData, &d3dResource.backBufferDescription);
-					}
+					D3DGoWindowed(&d3dResource);
 				}
 
 				if (keyboard->two.endedDown)
 				{
-					if (D3DGoFullscreen(&d3dResource))
-					{
-						OutputDebugStringA("going fullscreen\n");
-						for (int cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
-						{
-							Cube* cube = cubes + cubeIndex;
-							if (cube)
-							{
-								CreateViewAndPerspective(cube->eye, cube->at, cube->up, &cube->renderData.constantBufferData, &d3dResource.backBufferDescription);
-							}
-						}
-						CreateOrthograhpicView(&polygon.renderData.constantBufferData, &d3dResource.backBufferDescription);
-					}
+					D3DGoFullscreen(&d3dResource);
 				}
 
 				Vector4 backBufferColor = Vector4{ 0.f, 0.96f, 0.831f, 1.f }; // 0,245,212
@@ -416,25 +431,42 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				}
 				D3DClearRenderTarget(&d3dResource, backBufferColor);
 
-				// GameUpdate(mouse, keyboard, &gameStatus);
-				// GameRender(&d3dResource);
- 
- 				for (int cubeIndex = 0; cubeIndex < ARRAYSIZE(cubes); ++cubeIndex)
- 				{
- 					Cube* cube = cubes + cubeIndex;
- 					if (cube)
- 					{
- 						UpdateCube(cube, cubeIndex % 2 == 0 ? 20.f : -40.f, &gameStatus);
- 						D3DRender(d3dResource.context, &cube->renderData);
- 					}
- 				}
- 				
- 				UpdatePolygon(&polygon, &gameStatus);
-				D3DRender(d3dResource.context, &polygon.renderData, &polygon.texture);
-				
+				//
+				// NOTE: Update and render
+				//
+				float padding = 20.f;
+				sprite.transform.position = DirectX::XMFLOAT3(
+				    (d3dResource.backBufferDescription.Width / 2.f - (sprite.transform.scale.x * sprite.texture.width) / 2.f) - padding,
+				    (d3dResource.backBufferDescription.Height / 2.f - (sprite.transform.scale.y * sprite.texture.height) / 2.f) - padding,
+				    0.f
+				);
+				ApplyTransform(&sprite.transform, &sprite.renderData.constantBufferData);
+ 				OrthographicProjection(&sprite.renderData.constantBufferData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
+				D3DRender(d3dResource.context, &sprite.renderData, &sprite.texture);
+
+				for (int transformIndex = 0; transformIndex < ARRAYSIZE(cubeTransforms); ++transformIndex)
+				{
+					Transform* cubeTransform = cubeTransforms + transformIndex;
+
+					float rotationSpeed = (transformIndex % 2 == 0) ? 40.f : -25.f;
+					cubeTransform->rotation.x += 0.5f*rotationSpeed*gameState.deltaTime;
+					cubeTransform->rotation.y += rotationSpeed*gameState.deltaTime;
+					cubeTransform->rotation.z = 0.f;
+
+					ApplyTransform(cubeTransform, &cube.renderData.constantBufferData);
+					PerspectiveProjection(&cube.renderData.constantBufferData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
+					D3DRender(d3dResource.context, &cube.renderData, &cube.texture);
+				}
+
+				//
+				// NOTE: Note present the buffer
+				//
 				D3DPresent(d3dResource.dxgiSwapChain);
 			}
-		
+			
+			//
+			// NOTE: On quit release resources
+			//
 			D3DReleaseAllResources(&d3dResource);
 		}
 		else

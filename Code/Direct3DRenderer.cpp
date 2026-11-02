@@ -1,41 +1,23 @@
-#include "Direct3DRenderer.h"
-
 internal_link void
-CreateOrthograhpicView(ConstantBufferData* constantBufferData, D3D11_TEXTURE2D_DESC* backBuffer)
+OrthographicProjection(ConstantBufferData* constantBufferData, unsigned int viewWidth, unsigned int viewHeight)
 {
-	DirectX::XMStoreFloat4x4(&constantBufferData->world, DirectX::XMMatrixIdentity());
-	DirectX::XMStoreFloat4x4(&constantBufferData->view, DirectX::XMMatrixIdentity());
+	float nearPlane = 0.01f;
+	float farPlane = 100.f;
 
-	float viewportWidth = (float)backBuffer->Width;
-	float viewportHeight = (float)backBuffer->Height;
-	float aspectRatio = viewportWidth / viewportHeight;
-	DirectX::XMMATRIX projection = DirectX::XMMatrixOrthographicRH(
-		2.f*aspectRatio,
-		2.f,
-		0.01f,   // near plane
-		100.f    // far plane
-	);
-	DirectX::XMStoreFloat4x4(&constantBufferData->projection, projection);
+	DirectX::XMMATRIX projection = DirectX::XMMatrixOrthographicRH((float)viewWidth, (float)viewHeight, nearPlane, farPlane);
+	DirectX::XMStoreFloat4x4(&constantBufferData->projection, DirectX::XMMatrixTranspose(projection));
 }
 
 internal_link void
-CreateViewAndPerspective(DirectX::XMVECTOR eye, DirectX::XMVECTOR at,  DirectX::XMVECTOR up,
-						 ConstantBufferData* constantBufferData, D3D11_TEXTURE2D_DESC* backBuffer)
+PerspectiveProjection(ConstantBufferData* constantBufferData, unsigned int viewWidth, unsigned int viewHeight)
 {
-	// TODO: These can be in the same method for now because the camera is static
-	// if the camera were to move then the view would need to be updated every frame
+	float fov = DirectX::XMConvertToRadians(65.f);
+	float aspectRatio = (float)viewWidth / (float)viewHeight;
+	float nearPlane = 0.01f;
+	float farPlane = 100.f;
 
-	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(eye, at, up);
-	view = DirectX::XMMatrixTranspose(view);
-	DirectX::XMStoreFloat4x4(&constantBufferData->view, view);
-
-	float aspectRatioX = backBuffer->Width / (float)backBuffer->Height;
-	float aspectRatioY = aspectRatioX < (16.f / 9.f) ? aspectRatioX / (16.f / 9.f) : 1.f;
-
-	float fov = 2.f * std::atan(std::tan(DirectX::XMConvertToRadians(70) * 0.5f) / aspectRatioY);
-	DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovRH(fov, aspectRatioX, 0.01f, 100.f);
-	projection = DirectX::XMMatrixTranspose(projection);
-	DirectX::XMStoreFloat4x4(&constantBufferData->projection, projection);
+	DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovRH(fov, aspectRatio, nearPlane, farPlane);
+	DirectX::XMStoreFloat4x4(&constantBufferData->projection, DirectX::XMMatrixTranspose(projection));
 }
 
 internal_link HRESULT
@@ -207,59 +189,58 @@ D3DCreateSwapChain(D3DResource* d3dResource, HWND window)
 inline void
 D3DReleaseBackBuffer(D3DResource* d3dResource)
 {
+	d3dResource->context->Flush();
 	d3dResource->renderTarget->Release();
 	d3dResource->backBuffer->Release();
 	d3dResource->depthStencilView->Release();
 	d3dResource->depthStencil->Release();
-	d3dResource->context->Flush();
 }
 
-inline bool
+inline void
+ResizeBackBuffer(D3DResource* d3dResource)
+{
+	D3DReleaseBackBuffer(d3dResource);
+
+	HRESULT result = d3dResource->dxgiSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+	ASSERT_OK(result, "Unable to resize back buffer\n");
+
+	result = D3DConfigureBackBuffer(d3dResource);
+	ASSERT_OK(result, "Unable to configure back buffer");
+
+	isWindowResizing = false;
+	OutputDebugStringA("Window was resized \n");
+}
+
+inline void
 D3DGoFullscreen(D3DResource* d3dResource)
 {
 	BOOL isFullscreen;
 	d3dResource->dxgiSwapChain->GetFullscreenState(&isFullscreen, 0);
 	
-	if (!isFullscreen)
+	if (!isFullscreen && !isWindowResizing)
 	{
+		isWindowResizing = true;
 		HRESULT result = d3dResource->dxgiSwapChain->SetFullscreenState(TRUE, NULL);
 		ASSERT_OK(result, "Unable to SetFullscreenState to TRUE on dxgiSwapChain");
 
-		D3DReleaseBackBuffer(d3dResource);
-
-		d3dResource->dxgiSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
-
-		result = D3DConfigureBackBuffer(d3dResource);
-		ASSERT_OK(result, "Unable to configure back buffer after Fullscreen attempt");
-
-		return true;
+		ResizeBackBuffer(d3dResource);
 	}
-
-	return false;
 }
 
-inline bool
+inline void
 D3DGoWindowed(D3DResource* d3dResource)
 {
 	BOOL isFullscreen;
 	d3dResource->dxgiSwapChain->GetFullscreenState(&isFullscreen, 0);
 
-	if (isFullscreen)
+	if (isFullscreen && !isWindowResizing)
 	{
+		isWindowResizing = true;
 		HRESULT result = d3dResource->dxgiSwapChain->SetFullscreenState(FALSE, NULL);
 		ASSERT_OK(result, "Unable to SetFullscreenState to FALSE on dxgiSwapChain");
 
-		D3DReleaseBackBuffer(d3dResource);
-
-		d3dResource->dxgiSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
-
-		result = D3DConfigureBackBuffer(d3dResource);
-		ASSERT_OK(result, "Unable to configure back buffer after Fullscreen attempt");
-
-		return true;
+		ResizeBackBuffer(d3dResource);
 	}
-
-	return false;
 }
 
 inline void
@@ -356,7 +337,7 @@ CreateVertexBuffer(ID3D11Device* device, VertexPositionColor verticies[], int ve
 	HRESULT result = device->CreateBuffer(&vertexBufferDescription, &vertexData, &renderData->vertexBuffer);
 	if (FAILED(result))
 	{
-		OutputDebugStringA("Unable to create polygon vertex buffer\n");
+		OutputDebugStringA("Unable to create sprite vertex buffer\n");
 	}
 }
 
@@ -376,7 +357,7 @@ CreateIndexBuffer(ID3D11Device* device, unsigned short indices[], int indexCount
     HRESULT result = device->CreateBuffer(&indexBufferDescription, &indexData, &renderData->indexBuffer);
     if (FAILED(result))
     {
-    	OutputDebugStringA("Unable to create polygon index buffer\n");
+    	OutputDebugStringA("Unable to create sprite index buffer\n");
     }
 }
 
@@ -572,65 +553,123 @@ GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1Fi
 	stbi_image_free(stbTexture2Data);
 }
 
+internal_link void
+ApplyTransform(Transform* transform, ConstantBufferData* constantBuffer)
+{
+	DirectX::XMMATRIX model = DirectX::XMMatrixIdentity();
+
+	//
+	// NOTE: Scale
+	//
+	DirectX::XMMATRIX scale = DirectX::XMMatrixScalingFromVector(DirectX::XMVectorSet(
+		transform->scale.x, 
+		transform->scale.y, 
+		transform->scale.z, 
+		1.f)
+	);
+	model = DirectX::XMMatrixMultiply(model, scale);
+
+	//
+	// NOTE: Rotate
+	//
+	// From the microsoft docs, negating since I am using a RH coordinate system
+	// Angles are measured clockwise when looking along the rotation axis toward the origin. 
+	// This is a left-handed coordinate system. 
+	// To use right-handed coordinates, negate all three angles
+	DirectX::XMVECTOR quaternion = DirectX::XMQuaternionRotationRollPitchYaw(
+		-DirectX::XMConvertToRadians(transform->rotation.x),
+		-DirectX::XMConvertToRadians(transform->rotation.y),
+		-DirectX::XMConvertToRadians(transform->rotation.z)
+	);
+	DirectX::XMMATRIX rotation = DirectX::XMMatrixRotationQuaternion(quaternion);
+	model = DirectX::XMMatrixMultiply(model, rotation);
+
+	//
+	// NOTE: Translate
+	//
+	DirectX::XMMATRIX translation = DirectX::XMMatrixTranslation(0.f, 0.f, 0.f);
+	model = DirectX::XMMatrixMultiply(model, translation);
+
+	//
+	// NOTE: Store the model after transforms
+	//
+	DirectX::XMStoreFloat4x4(&constantBuffer->model, DirectX::XMMatrixTranspose(model));
+
+	//
+	// NOTE: Store view
+	//
+	DirectX::XMMATRIX view = DirectX::XMMatrixTranslation(
+		transform->position.x, 
+		transform->position.y, 
+		transform->position.z
+	);
+	DirectX::XMStoreFloat4x4(&constantBuffer->view, DirectX::XMMatrixTranspose(view));
+}
+
 inline void
-UpdatePolygon(ConvexPolygon* polygon, GameStatus* gameStatus)
+ScaleUniform(Transform* transform, float scale)
 {
-	// NOTE: Just modulating the green channel to show change
-	polygon->renderData.constantBufferData.colorModulation.x = 1.f;
-	polygon->renderData.constantBufferData.colorModulation.y = (std::sin(gameStatus->totalTime) / 2.0f) + 0.5f;
-	polygon->renderData.constantBufferData.colorModulation.z = 1.f;
-	polygon->renderData.constantBufferData.colorModulation.w = 1.f;
+	transform->scale.x = scale;
+	transform->scale.y = scale;
+	transform->scale.z = scale;
 }
 
 internal_link void
-UpdateCube(Cube* cube, float rotationSpeed, GameStatus* gameStatus)
-{
-	cube->rotation += rotationSpeed*gameStatus->deltaTime;
-	float angle = DirectX::XMConvertToRadians(cube->rotation);
-	
-	DirectX::XMMATRIX axisRotation = DirectX::XMMatrixRotationY(angle);
-	axisRotation = DirectX::XMMatrixTranspose(axisRotation);
-	DirectX::XMStoreFloat4x4(&cube->renderData.constantBufferData.world, axisRotation);
-}
-
-internal_link void
-CreatePolygon(ID3D11Device* device, ConvexPolygon* polygon, D3D11_TEXTURE2D_DESC* backBufferDescription)
+CreateSprite(ID3D11Device* device, Sprite* sprite)
 {	
-	VertexPositionColor verticies[] =
-	{
-		{DirectX::XMFLOAT3(0.5, 0.5f, 0.f), DirectX::XMFLOAT3(1.f, 0.f, 0.f), DirectX::XMFLOAT2(1.f, 0.f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f, 0.f), DirectX::XMFLOAT3(0.f, 1.f, 0.f), DirectX::XMFLOAT2(1.f, 1.f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
-		{DirectX::XMFLOAT3(-0.5f, 0.5f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 0.f), DirectX::XMFLOAT2(0.f, 0.f)},
-	};
+	sprite->transform.position = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
+	sprite->transform.scale = DirectX::XMFLOAT3(1.f, 1.f, 1.f);
+	sprite->transform.rotation = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
 
-	unsigned short indices[] = 
-	{
-		0, 1, 2,
-		0, 2, 3,
-	};
+	GenerateTexture(device, &sprite->texture, "WoodContainer.jpg", "AwesomeFace.png");
 
-	CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &polygon->renderData);
-	CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &polygon->renderData);
-	CreateOrthograhpicView(&polygon->renderData.constantBufferData, backBufferDescription);
-	LoadShaders(device, &polygon->renderData, "BasicOrthographicVertexShader.cso", "BasicTexturePixelShader.cso");
-	GenerateTexture(device, &polygon->texture, "WoodContainer.jpg", "AwesomeFace.png");
+	// TODO: Probably need a better way to check validity?
+	if (sprite->texture.source)
+	{
+		sprite->transform.position = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
+		sprite->transform.scale = DirectX::XMFLOAT3(1.f, 1.f, 1.f);
+		sprite->transform.rotation = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
+
+		float width = (float)sprite->texture.width;
+		float height = (float)sprite->texture.height;
+		float halfWidth = 0.5f*width;
+		float halfHeight = 0.5f*height;
+
+		VertexPositionColor verticies[] =
+		{
+			{DirectX::XMFLOAT3(halfWidth, halfHeight, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
+			{DirectX::XMFLOAT3(halfWidth, -halfHeight, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
+			{DirectX::XMFLOAT3(-halfWidth, -halfHeight, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+			{DirectX::XMFLOAT3(-halfWidth, halfHeight, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
+		};
+
+		unsigned short indices[] = 
+		{
+			0,1,2,
+			0,2,3,
+		};
+
+		CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &sprite->renderData);
+		CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &sprite->renderData);
+		LoadShaders(device, &sprite->renderData, "BasicVertexShader.cso", "BasicTexturePixelShader.cso");
+	}
 }
 
 internal_link void
 CreateCube(ID3D11Device* device, Cube* cube, float size)
 {
+#if 0
 	VertexPositionColor verticies[] =
 	{
-		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(0.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},
-		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},
-		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(0.f, 1.f, 1.f)},
+		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(0.f, 0.f, 0.f)}, // 0
+		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},  // 1
+		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},  // 2
+		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(0.f, 1.f, 1.f)},   // 3
 
-		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 0.f, 1.f)},
-		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 0.f)},
-		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},  // 4
+		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 0.f, 1.f)},   // 5
+		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 0.f)},   // 6
+		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},    // 7
 	};
 
 	unsigned short indices[] =
@@ -653,48 +692,64 @@ CreateCube(ID3D11Device* device, Cube* cube, float size)
 		1,3,7, // +z
 		1,7,5,
 	};
+#else
+	VertexPositionColor verticies[] =
+	{
+		// -X face
+		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
+		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
+		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
+
+		// +X face
+		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
+		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
+		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
+
+		// -Y face
+		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
+		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
+		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
+
+		// +Y face
+		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
+		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
+		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
+
+		// -Z face
+		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
+		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
+		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
+
+		// +Z face
+		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
+		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
+		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
+	};
+
+	unsigned short indices[] =
+	{
+		0,1,2, 2,1,3,       // -X
+		4,5,6, 6,5,7,       // +X
+		8,9,10, 10,9,11,    // -Y
+		12,13,14, 14,13,15, // +Y
+		16,17,18, 18,17,19, // -Z
+		21,20,22, 22,21,23, // +Z
+	};
+#endif
 
 	CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &cube->renderData);
 	CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &cube->renderData);
-}
 
-internal_link void
-CreateCubes(Cube cubes[4], ID3D11Device* device, D3D11_TEXTURE2D_DESC* backBufferDescription)
-{
-	Cube cube0 = {};
-	CreateCube(device, &cube0, 0.25f);
-	cube0.eye = DirectX::XMVectorSet(0.f, 0.5f, 2.f, 0.f);
-	cube0.at = DirectX::XMVectorSet(-1.f, 0.f, 0.f, 0.f);
-	cube0.up = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
-	CreateViewAndPerspective(cube0.eye, cube0.at, cube0.up, &cube0.renderData.constantBufferData, backBufferDescription);
-	LoadShaders(device, &cube0.renderData, "BasicPerspectiveVertexShader.cso", "BasicPixelShader.cso");
-
-	Cube cube1 = {};
-	CreateCube(device, &cube1, 0.25f);
-	cube1.eye = DirectX::XMVectorSet(0.f, -0.5f, 2.f, 0.f);
-	cube1.at = DirectX::XMVectorSet(0.f, -0.8f, 0.f, 0.f);
-	cube1.up = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
-	CreateViewAndPerspective(cube1.eye, cube1.at, cube1.up, &cube1.renderData.constantBufferData, backBufferDescription);
-	LoadShaders(device, &cube1.renderData, "BasicPerspectiveVertexShader.cso", "BasicPixelShader.cso");
-
-	Cube cube2 = {};
-	CreateCube(device, &cube2, 0.25f);
-	cube2.eye = DirectX::XMVectorSet(0.f, 0.5f, 2.f, 0.f);
-	cube2.at = DirectX::XMVectorSet(1.f, 0.f, 0.f, 0.f);
-	cube2.up = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
-	CreateViewAndPerspective(cube2.eye, cube2.at, cube2.up, &cube2.renderData.constantBufferData, backBufferDescription);
-	LoadShaders(device, &cube2.renderData, "BasicPerspectiveVertexShader.cso", "BasicPixelShader.cso");
-
-	Cube cube3 = {};
-	CreateCube(device, &cube3, 0.25f);
-	cube3.eye = DirectX::XMVectorSet(0.f, 0.5f, 2.f, 0.f);
-	cube3.at = DirectX::XMVectorSet(0.f, 0.8f, 0.f, 0.f);
-	cube3.up = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
-	CreateViewAndPerspective(cube3.eye, cube3.at, cube3.up, &cube3.renderData.constantBufferData, backBufferDescription);
-	LoadShaders(device, &cube3.renderData, "BasicPerspectiveVertexShader.cso", "BasicPixelShader.cso");
-
-	cubes[0] = cube0;
-	cubes[1] = cube1;
-	cubes[2] = cube2;
-	cubes[3] = cube3;
+#if 0	
+	LoadShaders(device, &cube->renderData, "BasicVertexShader.cso", "BasicPixelShader.cso");
+#else
+	LoadShaders(device, &cube->renderData, "BasicVertexShader.cso", "BasicTexturePixelShader.cso");
+	GenerateTexture(device, &cube->texture, "WoodContainer.jpg", "AwesomeFace.png");
+#endif
 }

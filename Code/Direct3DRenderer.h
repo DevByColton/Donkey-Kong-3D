@@ -1,10 +1,6 @@
 #ifndef DIRECTX_H
 #define DIRECTX_H
 
-#include <d3d11.h>
-#include <dxgi1_3.h>
-#include <DirectXMath.h>
-
 struct VertexPositionColor
 {
     DirectX::XMFLOAT3 position = {};
@@ -14,7 +10,7 @@ struct VertexPositionColor
 
 struct ConstantBufferData
 {
-    DirectX::XMFLOAT4X4 world = {};
+    DirectX::XMFLOAT4X4 model = {};
     DirectX::XMFLOAT4X4 view = {};
     DirectX::XMFLOAT4X4 projection = {};
     DirectX::XMFLOAT4 colorModulation = {};
@@ -31,32 +27,6 @@ struct RenderData
     ID3D11VertexShader* vertexShader = {0};
     ID3D11PixelShader* pixelShader = {0};
     ID3D11InputLayout* inputLayout = {0};
-};
-
-struct Texture2D
-{
-    int width = {};
-    int height = {}; 
-    int numberOfColorChannels = {};
-    ID3D11Texture2D* source = {0};
-    ID3D11ShaderResourceView* view = {0};
-    ID3D11SamplerState* sampler = {0};
-    ID3D11BlendState* blend = {0};
-};
-
-struct ConvexPolygon
-{
-    RenderData renderData = {};
-    Texture2D texture = {};
-};
-
-struct Cube
-{
-    RenderData renderData = {};
-    DirectX::XMVECTOR eye = {};
-    DirectX::XMVECTOR at = {};
-    DirectX::XMVECTOR up = {};
-    float rotation = {};
 };
 
 struct D3DResource
@@ -77,6 +47,24 @@ struct D3DResource
     ID3D11DepthStencilView* depthStencilView = {0};
 
     ID3D11RasterizerState* rasterizerState = {0};
+};
+
+struct Texture2D
+{
+    int width = {};
+    int height = {}; 
+    int numberOfColorChannels = {};
+    ID3D11Texture2D* source = {0};
+    ID3D11ShaderResourceView* view = {0};
+    ID3D11SamplerState* sampler = {0};
+    ID3D11BlendState* blend = {0};
+};
+
+struct Transform
+{
+    DirectX::XMFLOAT3 position = {};
+    DirectX::XMFLOAT3 rotation = {};
+    DirectX::XMFLOAT3 scale = {};
 };
 
 #endif // DIRECTX_H

@@ -16,5 +16,5 @@ float4 main(PixelShaderInput input) : SV_TARGET
     float4 blended = lerp(texture1Color, texture2Color, 0.2f);
     blended.a = 1.f;
 
-    return blended;
+    return blended * input.color;
 }

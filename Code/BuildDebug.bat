@@ -31,8 +31,7 @@ REM Compile shaders
 set fxc="C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe"
 set ShaderDir=C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Data\
 
-%fxc% /Fo "%ShaderDir%BasicOrthographicVertexShader.cso" /T vs_5_0 "%ShaderDir%BasicOrthographicVertexShader.hlsl"
-%fxc% /Fo "%ShaderDir%BasicPerspectiveVertexShader.cso" /T vs_5_0 "%ShaderDir%BasicPerspectiveVertexShader.hlsl"
+%fxc% /Fo "%ShaderDir%BasicVertexShader.cso" /T vs_5_0 "%ShaderDir%BasicVertexShader.hlsl"
 %fxc% /Fo "%ShaderDir%BasicPixelShader.cso" /T ps_5_0 "%ShaderDir%BasicPixelShader.hlsl"
 %fxc% /Fo "%ShaderDir%BasicTexturePixelShader.cso" /T ps_5_0 "%ShaderDir%BasicTexturePixelShader.hlsl"
 
