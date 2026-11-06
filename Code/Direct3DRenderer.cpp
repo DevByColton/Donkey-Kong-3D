@@ -145,40 +145,52 @@ D3DInitialize(D3DResource* d3dResource)
 internal_link HRESULT
 D3DCreateSwapChain(D3DResource* d3dResource, HWND window)
 {
-	DXGI_SWAP_CHAIN_DESC dxgiDescription;
-	ZeroMemory(&dxgiDescription, sizeof(DXGI_SWAP_CHAIN_DESC));
-	dxgiDescription.Windowed = TRUE;
-	dxgiDescription.BufferCount = 2;
-	dxgiDescription.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-	dxgiDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	DXGI_SWAP_CHAIN_DESC1 dxgiDescription;
+	ZeroMemory(&dxgiDescription, sizeof(DXGI_SWAP_CHAIN_DESC1));
+	dxgiDescription.Width = 0;
+	dxgiDescription.Height = 0;
+	dxgiDescription.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	dxgiDescription.Stereo = FALSE;
 	dxgiDescription.SampleDesc.Count = 1;
 	dxgiDescription.SampleDesc.Quality = 0;
+	dxgiDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	dxgiDescription.BufferCount = 2;
+	dxgiDescription.Scaling = DXGI_SCALING_NONE;
 	dxgiDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-	dxgiDescription.OutputWindow = window;
+	dxgiDescription.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 
-	// NOTE: To manually set the frame rate
-	// dxgiDescription.BufferDesc.RefreshRate.Numerator = 60;
-	// dxgiDescription.BufferDesc.RefreshRate.Denominator = 1;
+	DXGI_SWAP_CHAIN_FULLSCREEN_DESC dxgiFullScreenDescription;
+	ZeroMemory(&dxgiFullScreenDescription, sizeof(DXGI_SWAP_CHAIN_FULLSCREEN_DESC));
+	dxgiFullScreenDescription.RefreshRate.Numerator = 0;
+	dxgiFullScreenDescription.RefreshRate.Denominator = 1;
+	dxgiFullScreenDescription.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+	dxgiFullScreenDescription.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+	dxgiFullScreenDescription.Windowed = TRUE;
 
-	IDXGIDevice3* dxgiDevice = {0};
-	HRESULT result = d3dResource->device->QueryInterface(__uuidof(IDXGIDevice3), (void **)&dxgiDevice);
+	IDXGIDevice* dxgiDevice = {0};
+	HRESULT result = d3dResource->device->QueryInterface(__uuidof(IDXGIDevice), (void **)&dxgiDevice);
 	ASSERT_OK(result, "Cannot create dxgiDevice");
-
-	// Create swap chain.
-	IDXGIAdapter* dxgiAdapter = {0};
-	IDXGIFactory* dxgiFactory = {0};
 
 	//
 	// NOTE: Get the adapter
 	//
+	IDXGIAdapter* dxgiAdapter = {0};
 	result = dxgiDevice->GetAdapter(&dxgiAdapter);
 	ASSERT_OK(result, "Cannot create dxgiAdapter");
 
 	//
 	// NOTE: Create the swap chain
 	//
+	IDXGIFactory2* dxgiFactory = {0};
 	dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
-	result = dxgiFactory->CreateSwapChain(d3dResource->device, &dxgiDescription, &d3dResource->dxgiSwapChain);
+	result = dxgiFactory->CreateSwapChainForHwnd(
+		d3dResource->device,
+		window,
+		&dxgiDescription,
+		&dxgiFullScreenDescription,
+		NULL, 
+		&d3dResource->dxgiSwapChain
+	);
 	ASSERT_OK(result, "Cannot create dxgiSwapChain");
 
 	D3DConfigureBackBuffer(d3dResource);
@@ -207,19 +219,19 @@ ResizeBackBuffer(D3DResource* d3dResource, unsigned int width, unsigned int heig
 	result = D3DConfigureBackBuffer(d3dResource);
 	ASSERT_OK(result, "Unable to configure back buffer");
 
-	isWindowResizing = false;
+	d3dResource->isWindowResizing = false;
 	OutputDebugStringA("Window was resized \n");
 }
 
 inline void
-D3DGoFullscreen(D3DResource* d3dResource)
+D3DGoExclusiveFullscreen(D3DResource* d3dResource)
 {
 	BOOL isFullscreen;
 	d3dResource->dxgiSwapChain->GetFullscreenState(&isFullscreen, 0);
 	
-	if (!isFullscreen && !isWindowResizing)
+	if (!isFullscreen && !d3dResource->isWindowResizing)
 	{
-		isWindowResizing = true;
+		d3dResource->isWindowResizing = true;
 		HRESULT result = d3dResource->dxgiSwapChain->SetFullscreenState(TRUE, NULL);
 		ASSERT_OK(result, "Unable to SetFullscreenState to TRUE on dxgiSwapChain");
 
@@ -233,13 +245,13 @@ D3DGoWindowed(D3DResource* d3dResource)
 	BOOL isFullscreen;
 	d3dResource->dxgiSwapChain->GetFullscreenState(&isFullscreen, 0);
 
-	if (isFullscreen && !isWindowResizing)
+	if (isFullscreen && !d3dResource->isWindowResizing)
 	{
-		isWindowResizing = true;
+		d3dResource->isWindowResizing = true;
 		HRESULT result = d3dResource->dxgiSwapChain->SetFullscreenState(FALSE, NULL);
 		ASSERT_OK(result, "Unable to SetFullscreenState to FALSE on dxgiSwapChain");
 
-		ResizeBackBuffer(d3dResource, 1280, 720);
+		ResizeBackBuffer(d3dResource, 0, 0);
 	}
 }
 
@@ -302,12 +314,13 @@ D3DRender(ID3D11DeviceContext* context, RenderData* renderData, Texture2D* textu
 }
 
 internal_link void
-D3DPresent(IDXGISwapChain* dxgiSwapChain)
+D3DPresent(D3DResource* d3dResource)
 {
 	//
 	// NOTE: Presenting with vsync enabled
 	//
-	dxgiSwapChain->Present(1, 0);
+	const DXGI_PRESENT_PARAMETERS presentParams{};
+	d3dResource->dxgiSwapChain->Present1(1, 0, &presentParams);
 }
 
 internal_link void
@@ -315,8 +328,6 @@ D3DReleaseAllResources(D3DResource* d3dResource)
 {
 	d3dResource->context->ClearState();
 	d3dResource->context->Flush();
-	HRESULT result = d3dResource->dxgiSwapChain->SetFullscreenState(FALSE, NULL);
-	ASSERT_OK(result, "Unable to SetFullscreenState to FALSE on dxgiSwapChain");
 	d3dResource->renderTarget->Release();
 	d3dResource->depthStencilView->Release();
 	d3dResource->depthStencil->Release();
@@ -717,65 +728,3 @@ CreateTexturedCube(ID3D11Device* device, Cube* cube, float size)
 	LoadShaders(device, &cube->renderData, "BasicVertexShader.cso", "BasicTexturePixelShader.cso");
 	GenerateTexture(device, &cube->texture, "WoodContainer.jpg", "AwesomeFace.png");
 }
-
-#if 0
-//
-// TODO: Microsoft docs reccomend switching the IDXGISwapChain1 for more modern fullscreen behavior
-// This is the base setup, but I need to implement all of the things for IDXGISwapChain1
-//
-internal_link HRESULT
-D3DCreateSwapChain2(D3DResource* d3dResource, HWND window)
-{
-	DXGI_SWAP_CHAIN_DESC1 dxgiDescription;
-	ZeroMemory(&dxgiDescription, sizeof(DXGI_SWAP_CHAIN_DESC1));
-	dxgiDescription.Width = 0;
-	dxgiDescription.Height = 0;
-	dxgiDescription.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-	dxgiDescription.Stereo = TRUE;
-	dxgiDescription.SampleDesc.Count = 1;
-	dxgiDescription.SampleDesc.Quality = 0;
-	dxgiDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	dxgiDescription.BufferCount = 2;
-	dxgiDescription.Scaling = DXGI_SCALING_ASPECT_RATIO_STRETCH;
-	dxgiDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-	dxgiDescription.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-
-	DXGI_SWAP_CHAIN_FULLSCREEN_DESC dxgiFullScreenDescription;
-	ZeroMemory(&dxgiFullScreenDescription, sizeof(DXGI_SWAP_CHAIN_FULLSCREEN_DESC));
-	dxgiFullScreenDescription.RefreshRate.Numerator = 0;
-	dxgiFullScreenDescription.RefreshRate.Denominator = 1;
-	dxgiFullScreenDescription.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	dxgiFullScreenDescription.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	dxgiFullScreenDescription.Windowed = FALSE;
-
-	IDXGIDevice* dxgiDevice = {0};
-	HRESULT result = d3dResource->device->QueryInterface(__uuidof(IDXGIDevice), (void **)&dxgiDevice);
-	ASSERT_OK(result, "Cannot create dxgiDevice");
-
-	//
-	// NOTE: Get the adapter
-	//
-	IDXGIAdapter* dxgiAdapter = {0};
-	result = dxgiDevice->GetAdapter(&dxgiAdapter);
-	ASSERT_OK(result, "Cannot create dxgiAdapter");
-
-	//
-	// NOTE: Create the swap chain
-	//
-	IDXGIFactory2* dxgiFactory = {0};
-	dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
-	result = dxgiFactory->CreateSwapChainForHwnd(
-		d3dResource->device,
-		window,
-		&dxgiDescription,
-		&dxgiFullScreenDescription,
-		NULL, 
-		&d3dResource->dxgiSwapChain1
-	);
-	ASSERT_OK(result, "Cannot create dxgiSwapChain");
-
-	D3DConfigureBackBuffer(d3dResource);
-
-	return result;
-}
-#endif

@@ -22,10 +22,10 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 			// When the window is resized
 			case WM_APP_SIZE:
 			{
-				OutputDebugStringA("IN WM_APP_SIZE\n");
-				if (!isWindowResizing)
+				if (!d3dResource->isWindowResizing && gameState->isRunning)
 				{
-					isWindowResizing = true;
+					OutputDebugStringA("IN WM_APP_SIZE\n");
+					d3dResource->isWindowResizing = true;
 					unsigned int width = LOWORD(message.lParam);
 					unsigned int height = HIWORD(message.lParam);
 					ResizeBackBuffer(d3dResource, width, height);
@@ -291,6 +291,7 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 				// NOTE: When the window moves, nothing do for now
 			    OutputDebugStringA("SC_MOVE\n");
 			}
+#if 0			
 			else if ((wParam & 0xFFF0) == SC_SIZE)
 			{
 				PostMessageA(window, WM_APP_SIZE, wParam, lParam);
@@ -306,6 +307,7 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 				PostMessageA(window, WM_APP_SIZE, wParam, lParam);
 				OutputDebugStringA("SC_MINIMIZE\n");
 			}
+#endif			
 		};
 
 		// Every other unhandled message, there is a lot
@@ -635,8 +637,6 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			result = D3DCreateSwapChain(&d3dResource, window);			
 			ASSERT_OK(result, "Unable to create swap chain");
 
-			D3DGoFullscreen(&d3dResource);
-
 			int mouseX = d3dResource.backBufferDescription.Width / 2;
 			int mouseY = d3dResource.backBufferDescription.Height / 2;
 			SetCursorPos(mouseX, mouseY);
@@ -717,7 +717,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 
 				if (newInput.keyboard.two.endedDown)
 				{
-					D3DGoFullscreen(&d3dResource);
+					D3DGoExclusiveFullscreen(&d3dResource);
 				}
 
 				HandleCameraMovement(&gameState, &previousInput, &newInput, &camera, 5.f, 30.f, 100.f);
@@ -748,7 +748,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				//
 				// NOTE: Note present the buffer
 				//
-				D3DPresent(d3dResource.dxgiSwapChain);
+				D3DPresent(&d3dResource);
 
 				// NOTE: Swap input state
 				GameInput temp = newInput;
@@ -759,6 +759,8 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			//
 			// NOTE: On quit release resources
 			//
+			D3DClearRenderTarget(&d3dResource, Vector4{0.5f, 0.5f, 0.5f, 1.f});
+			D3DPresent(&d3dResource);
 			D3DReleaseAllResources(&d3dResource);
 			DestroyWindow(window);
 		}

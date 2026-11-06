@@ -35,10 +35,11 @@ struct D3DResource
     D3D_FEATURE_LEVEL featureLevel;
     D3D11_VIEWPORT viewport;
     D3D11_TEXTURE2D_DESC backBufferDescription;
+    bool isWindowResizing = false;
     
     ID3D11Device* device = {0};
     ID3D11DeviceContext* context = {0};
-    IDXGISwapChain* dxgiSwapChain = {0};
+    IDXGISwapChain1* dxgiSwapChain = {0};
 
     ID3D11Texture2D* backBuffer = {0};
     ID3D11RenderTargetView* renderTarget = {0};
@@ -47,9 +48,6 @@ struct D3DResource
     ID3D11DepthStencilView* depthStencilView = {0};
 
     ID3D11RasterizerState* rasterizerState = {0};
-
-    // TODO: implement this, base setup method is already defined
-    // IDXGISwapChain1* dxgiSwapChain1 = {0};
 };
 
 struct Texture2D

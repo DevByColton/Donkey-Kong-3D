@@ -23,8 +23,6 @@
 
 #define ASSERT_OK(hResult, errorMessage) if(FAILED(hResult)){assert(!errorMessage);}
 
-global_variable bool isWindowResizing = false;
-
 struct GameButton
 {
 	// TODO: Convert these to flags?
