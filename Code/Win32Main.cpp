@@ -11,7 +11,7 @@ Win32ProcessButtonMessage(GameButton* newState, bool isDown)
 }
 
 internal_link void
-Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInput* mouse, GameControllerInput* keyboardController, GameState* gameState)
+Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInput* mouse, GameKeyboardInput* keyboard, GameState* gameState)
 {
 	MSG message = {};
 
@@ -26,7 +26,9 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 				if (!isWindowResizing)
 				{
 					isWindowResizing = true;
-					ResizeBackBuffer(d3dResource);
+					unsigned int width = LOWORD(message.lParam);
+					unsigned int height = HIWORD(message.lParam);
+					ResizeBackBuffer(d3dResource, width, height);
 					OutputDebugStringA("DONE WM_APP_SIZE\n\n");
 				}
 			} break;
@@ -48,11 +50,13 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 			{
 				if (message.wParam)
 				{
+					gameState->isFocused = true;
 					OutputDebugStringA("GAINED focused\n");
 				}
 				else
 				{
 					// Todo: Handled lost foucs state, pause game, reset inputs etc
+					gameState->isFocused = false;
 					OutputDebugStringA("LOST focus\n");
 				}
 			} break;
@@ -69,9 +73,12 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 			// Mouse position
 			case WM_MOUSEMOVE:
 			{
-				ScreenToClient(window, &message.pt);
-				mouse->x = message.pt.x;
-				mouse->y = message.pt.y;
+				if (gameState->isFocused)
+				{
+					ScreenToClient(window, &message.pt);
+					mouse->x = message.pt.x;
+					mouse->y = message.pt.y;
+				}
 			} break;
 
 			// Mouse scroll wheel
@@ -124,75 +131,75 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 				{
 					if (virtualKeyCode == 'W') 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->w, isDown);
+						Win32ProcessButtonMessage(&keyboard->w, isDown);
 					}
 					else if (virtualKeyCode == 'A') 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->a, isDown);
+						Win32ProcessButtonMessage(&keyboard->a, isDown);
 					}
 					else if (virtualKeyCode == 'S') 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->s, isDown);
+						Win32ProcessButtonMessage(&keyboard->s, isDown);
 					}
 					else if (virtualKeyCode == 'D') 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->d, isDown);
+						Win32ProcessButtonMessage(&keyboard->d, isDown);
 					}
 					else if (virtualKeyCode == 'C') 
 					{
-						Win32ProcessButtonMessage(&keyboardController->c, isDown);
+						Win32ProcessButtonMessage(&keyboard->c, isDown);
 					}
 					else if (virtualKeyCode == 'K') 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->k, isDown);
+						Win32ProcessButtonMessage(&keyboard->k, isDown);
 					}
 					else if (virtualKeyCode == 'P') 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->p, isDown);
+						Win32ProcessButtonMessage(&keyboard->p, isDown);
 					}
 					else if (virtualKeyCode == 'M')
 					{	
-						Win32ProcessButtonMessage(&keyboardController->m, isDown);
+						Win32ProcessButtonMessage(&keyboard->m, isDown);
 					}
 					else if (virtualKeyCode == VK_ESCAPE) 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->escape, isDown);
+						Win32ProcessButtonMessage(&keyboard->escape, isDown);
 					}
 					else if (virtualKeyCode == VK_SHIFT) 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->shift, isDown);
+						Win32ProcessButtonMessage(&keyboard->shift, isDown);
 					}
 					else if (virtualKeyCode == VK_SPACE) 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->space, isDown);
+						Win32ProcessButtonMessage(&keyboard->space, isDown);
 					}
 					else if (virtualKeyCode == VK_UP) 
 					{
-						Win32ProcessButtonMessage(&keyboardController->up, isDown);
+						Win32ProcessButtonMessage(&keyboard->up, isDown);
 					}
 					else if (virtualKeyCode == VK_DOWN) 
 					{	
-						Win32ProcessButtonMessage(&keyboardController->down, isDown);
+						Win32ProcessButtonMessage(&keyboard->down, isDown);
 					}
 					else if (virtualKeyCode == VK_LEFT)
 					{
-						Win32ProcessButtonMessage(&keyboardController->left, isDown);
+						Win32ProcessButtonMessage(&keyboard->left, isDown);
 					}
 					else if (virtualKeyCode == VK_RIGHT) 
 					{
-						Win32ProcessButtonMessage(&keyboardController->right, isDown);
+						Win32ProcessButtonMessage(&keyboard->right, isDown);
 					}
 					else if (virtualKeyCode == VK_RETURN)
 					{
-						Win32ProcessButtonMessage(&keyboardController->enter, isDown);
+						Win32ProcessButtonMessage(&keyboard->enter, isDown);
 					}
 					else if (virtualKeyCode == '1')
 					{
-						Win32ProcessButtonMessage(&keyboardController->one, isDown);
+						Win32ProcessButtonMessage(&keyboard->one, isDown);
 					}
 					else if (virtualKeyCode == '2')
 					{
-						Win32ProcessButtonMessage(&keyboardController->two, isDown);
+						Win32ProcessButtonMessage(&keyboard->two, isDown);
 					}
 
 					// Hard kill, handle alt F4
@@ -203,7 +210,7 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 					}
 
 					// Standard windows keys to full screen
-					if (keyboardController->enter.endedDown && altKeyWasDown)
+					if (keyboard->enter.endedDown && altKeyWasDown)
 					{
 						// TODO: Figure this out
 						// ToggleFullscreen(d3dResource);
@@ -312,6 +319,288 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 	return result;
 }
 
+internal_link void
+Win32ProcessXInputButton(DWORD xInputButton, DWORD buttonBit, GameButton* previousState, GameButton* newState)
+{
+	newState->endedDown = ((xInputButton & buttonBit) == buttonBit);
+}
+
+internal_link float
+Win32ProcessXInputStickPosition(SHORT value, SHORT deadZoneThreshHold)
+{
+	float result = 0.f;
+
+	if ((value < -deadZoneThreshHold) || (value > deadZoneThreshHold))
+	{	
+		result = (float)value / 32768.f;
+	}
+
+	return result;
+}
+
+internal_link float
+Win32ProcessXInputTriggerPosition(BYTE value)
+{
+	float result = 0.f;
+
+	if (value > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+	{
+		result = (float)value / 255.f;
+	}
+
+	return result;
+}
+
+internal_link void
+Win32ProcessXInputControllers(GameInput* oldInput, GameInput* newInput)
+{
+	for (unsigned int controllerIndex = 0; controllerIndex < ARRAYSIZE(newInput->controllers); ++controllerIndex)
+	{
+		GameControllerInput* previousController = oldInput->controllers + controllerIndex;
+		GameControllerInput* newController = newInput->controllers + controllerIndex;
+
+		XINPUT_STATE controllerState = {};
+		if (XInputGetState(controllerIndex, &controllerState) == ERROR_SUCCESS)
+		{
+			// Controller is connected
+			XINPUT_GAMEPAD* gamepad = &controllerState.Gamepad;
+			newController->isConnected = true;
+
+			// Triggers
+			newController->leftTrigger = Win32ProcessXInputTriggerPosition(gamepad->bLeftTrigger);
+			newController->rightTrigger = Win32ProcessXInputTriggerPosition(gamepad->bRightTrigger);
+
+			// Left thumbstick x and y
+			newController->leftThumbstick = Vector2{Win32ProcessXInputStickPosition(gamepad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE),
+													Win32ProcessXInputStickPosition(gamepad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)};
+
+			// Right thumbstick x and y
+			newController->rightThumbstick = Vector2{Win32ProcessXInputStickPosition(gamepad->sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE),
+													 Win32ProcessXInputStickPosition(gamepad->sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE)};
+
+			// Thumbstick actions (just left thumbstick for now)
+			float threshold = 0.5f;
+			Win32ProcessXInputButton((newController->leftThumbstick.x< -threshold) ? 1 : 0, 1,
+									 &previousController->leftThumbstickLeft, &newController->leftThumbstickLeft);
+
+			Win32ProcessXInputButton((newController->leftThumbstick.x > threshold) ? 1 : 0, 1,
+									 &previousController->leftThumbstickRight, &newController->leftThumbstickRight);
+
+			Win32ProcessXInputButton((newController->leftThumbstick.y < -threshold) ? 1 : 0, 1,
+									 &previousController->leftThumbstickDown, &newController->leftThumbstickDown);
+
+			Win32ProcessXInputButton((newController->leftThumbstick.y > threshold) ? 1 : 0, 1,
+									 &previousController->leftThumbstickUp, &newController->leftThumbstickUp);
+
+			// All buttons and dpad
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_DPAD_UP, &previousController->dPadUp, &newController->dPadUp);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_DPAD_DOWN, &previousController->dPadDown, &newController->dPadDown);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_DPAD_LEFT,&previousController->dPadLeft, &newController->dPadLeft);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_DPAD_RIGHT, &previousController->dPadRight, &newController->dPadRight);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_A, &previousController->primary, &newController->primary);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_B, &previousController->secondary, &newController->secondary);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_X, &previousController->tertiary, &newController->tertiary);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_Y, &previousController->quaternary, &newController->quaternary);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_START, &previousController->start, &newController->start);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_BACK, &previousController->back, &newController->back);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_LEFT_THUMB, &previousController->leftThumbClick, &newController->leftThumbClick);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_RIGHT_THUMB, &previousController->rightThumbClick, &newController->rightThumbClick);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_LEFT_SHOULDER, &previousController->leftShoulder, &newController->leftShoulder);
+			Win32ProcessXInputButton(gamepad->wButtons, XINPUT_GAMEPAD_RIGHT_SHOULDER, &previousController->rightShoulder, &newController->rightShoulder);
+
+			// Set the controller vibration state
+			XINPUT_VIBRATION vibration = {};
+
+			if (newController->leftMotorVibrationSpeed > 0.f)
+			{
+				vibration.wLeftMotorSpeed = (WORD)(newController->leftMotorVibrationSpeed * 65535);
+			}
+
+			if (newController->rightMotorVibrationSpeed > 0.f)
+			{
+				vibration.wRightMotorSpeed = (WORD)(newController->rightMotorVibrationSpeed * 65535);
+			}
+
+			XInputSetState(controllerIndex, &vibration);
+		}
+		else
+		{
+			newController->isConnected = false;
+			// Controller is not connected
+			// This is where I can take action if a controller
+			// is not plugged in
+		}
+	}
+}
+
+internal_link void
+UpdateInputState(GameInput* previousInput, GameInput* newInput)
+{
+	//
+	// NOTE: Udpate mouse
+	//
+	newInput->mouse = {};
+	newInput->mouse.x = previousInput->mouse.x;
+	newInput->mouse.y = previousInput->mouse.y;
+	newInput->mouse.z = previousInput->mouse.z;
+	for (unsigned int buttonIndex = 0; buttonIndex < ARRAYSIZE(newInput->mouse.buttons); ++buttonIndex)
+	{
+		newInput->mouse.buttons[buttonIndex].endedDown = previousInput->mouse.buttons[buttonIndex].endedDown;
+	}
+
+	//
+	// NOTE: Update keyboard
+	//
+	newInput->keyboard = {};
+	newInput->keyboard.isConnected = true; // Assuming a keyboard is always connected!
+	for (unsigned int buttonIndex = 0; buttonIndex < ARRAYSIZE(newInput->keyboard.buttons); ++buttonIndex)
+	{
+		newInput->keyboard.buttons[buttonIndex].endedDown = previousInput->keyboard.buttons[buttonIndex].endedDown;
+	}
+
+	//
+	// NOTE: Update controllers
+	//
+	for (unsigned int controllerIndex = 0; controllerIndex < ARRAYSIZE(newInput->controllers); ++controllerIndex)
+	{
+		GameControllerInput* previousController = previousInput->controllers + controllerIndex;
+		GameControllerInput* newController = newInput->controllers + controllerIndex;
+
+		if (previousController->isConnected)
+		{
+			*newController = {};
+			newController->isConnected = previousController->isConnected;
+			newController->leftThumbstick = previousController->leftThumbstick;
+			newController->rightThumbstick = previousController->rightThumbstick;
+			newController->leftTrigger = previousController->leftTrigger;
+			newController->rightTrigger = previousController->rightTrigger;
+			newController->leftMotorVibrationSpeed = previousController->leftMotorVibrationSpeed;
+			newController->rightMotorVibrationSpeed = previousController->rightMotorVibrationSpeed;
+
+			for (unsigned int buttonIndex = 0; buttonIndex < ARRAYSIZE(newController->buttons); ++buttonIndex)
+			{
+				newController->buttons[buttonIndex].endedDown = previousController->buttons[buttonIndex].endedDown;
+			}
+		}
+		else
+		{
+			*previousController = {};
+			*newController = {};
+		}
+	}
+}
+
+internal_link void
+HandleCameraMovement(GameState* gameState, GameInput* previousInput, GameInput* newInput, Camera* camera, 
+					 float cameraSpeed, float mouseSensitivity, float thumbstickSensitivity)
+{
+	cameraSpeed *= gameState->deltaTime;
+	mouseSensitivity *= gameState->deltaTime;
+	thumbstickSensitivity *= gameState->deltaTime;
+
+	//
+	// NOTE: Handle look
+	//
+	float yaw = camera->yaw;
+	float pitch = camera->pitch;
+
+	if (gameState->isFocused)
+	{
+		// NOTE: Mouse look
+		float xMouseOffset = (float)newInput->mouse.x - (float)previousInput->mouse.x;
+		float yMouseOffset = (float)previousInput->mouse.y - (float)newInput->mouse.y;
+
+		// NOTE: Controller look
+		float xRightThumbstick = 0.f;
+		float yRightThumbstick = 0.f;
+		for (unsigned int controllerIndex = 0; controllerIndex < ARRAYSIZE(newInput->controllers); ++controllerIndex)
+		{
+			GameControllerInput* newController = newInput->controllers + controllerIndex;
+			
+			if (newController->isConnected)
+			{
+				xRightThumbstick += newController->rightThumbstick.x;
+				yRightThumbstick += newController->rightThumbstick.y;
+			}
+		}
+
+		yaw += ((xMouseOffset * mouseSensitivity) + (xRightThumbstick * thumbstickSensitivity));
+		pitch += ((yMouseOffset * mouseSensitivity) + (yRightThumbstick * thumbstickSensitivity));
+
+		// NOTE: Allow the camera to look up and down but clamping before hitting 90 where the LookAt would flip
+		if(pitch > 89.f)
+		{
+			pitch = 89.f;
+		}
+		if(pitch < -89.f)
+		{
+			pitch = -89.f;
+		}
+	}
+
+	// NOTE: Store yaw and pitch before converting to radians
+	camera->yaw = yaw;
+	camera->pitch = pitch;
+
+	yaw = DirectX::XMConvertToRadians(yaw);
+	pitch = DirectX::XMConvertToRadians(pitch);
+	float x = DirectX::XMScalarCos(yaw) * DirectX::XMScalarCos(pitch);
+	float y = DirectX::XMScalarSin(pitch);
+	float z = DirectX::XMScalarSin(yaw) * DirectX::XMScalarCos(pitch);
+	DirectX::XMVECTOR direction = DirectX::XMVectorSet(x, y, z, 0.f);
+
+	//
+	// NOTE: Handle directional movement
+	//
+	float moveRight = 0.0f;
+	float moveFront = 0.0f;
+	for (unsigned int controllerIndex = 0; controllerIndex < ARRAYSIZE(newInput->controllers); ++controllerIndex)
+	{
+		GameControllerInput* controller = newInput->controllers + controllerIndex;
+		if (controller->isConnected)
+		{
+			moveRight += controller->leftThumbstick.x;
+			moveFront += controller->leftThumbstick.y;
+		}
+	}
+
+	DirectX::FXMVECTOR previousPosition = DirectX::XMLoadFloat3(&camera->position);
+	DirectX::FXMVECTOR front = DirectX::XMVector3Normalize(direction);
+	DirectX::FXMVECTOR up = DirectX::XMLoadFloat3(&camera->up);
+	DirectX::FXMVECTOR right = DirectX::XMVector3Normalize(DirectX::XMVector3Cross(front, up));
+	
+	// NOTE: Factor in summed controller movement
+	DirectX::XMVECTOR newMovement = DirectX::XMVectorAdd(DirectX::XMVectorScale(right, moveRight), DirectX::XMVectorScale(front, moveFront));
+
+	// NOTE: Keyboard movement
+	if (newInput->keyboard.w.endedDown)
+	{
+		newMovement = DirectX::XMVectorAdd(newMovement, front);
+	}
+	if (newInput->keyboard.a.endedDown)
+	{
+		newMovement = DirectX::XMVectorSubtract(newMovement, right);
+	}
+	if (newInput->keyboard.s.endedDown)
+	{
+		newMovement = DirectX::XMVectorSubtract(newMovement, front);
+	}
+	if (newInput->keyboard.d.endedDown)
+	{
+		newMovement = DirectX::XMVectorAdd(newMovement, right);
+	}
+	
+	float newMovementLengthSq = DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(newMovement));
+	if (newMovementLengthSq > 1.f)
+	{
+		newMovement = DirectX::XMVector3Normalize(newMovement);
+	}
+
+	DirectX::XMVECTOR newPosition = DirectX::XMVectorAdd(previousPosition, DirectX::XMVectorScale(newMovement, cameraSpeed));
+	DirectX::XMStoreFloat3(&camera->position, newPosition);
+	DirectX::XMStoreFloat3(&camera->front, front);
+}
+
 int CALLBACK
 WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showCode)
 {
@@ -331,9 +620,9 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			0,
 			windowClass.lpszClassName,
 			"Donkey Kong 3D",
-			WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-			CW_USEDEFAULT, CW_USEDEFAULT, // 200, 100,
-			1920, 1080,
+			WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_MAXIMIZE,
+			0, 0, // 200, 100,
+			0, 0, // 1920, 1080,
 			0, 0, instance, 0
 		);
 
@@ -343,35 +632,54 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			HRESULT result = D3DInitialize(&d3dResource);
 			ASSERT_OK(result, "Unable to initialize D3D");
 
-			result = D3DCreateSwapChain(&d3dResource, window);
+			result = D3DCreateSwapChain(&d3dResource, window);			
 			ASSERT_OK(result, "Unable to create swap chain");
+
+			D3DGoFullscreen(&d3dResource);
+
+			int mouseX = d3dResource.backBufferDescription.Width / 2;
+			int mouseY = d3dResource.backBufferDescription.Height / 2;
+			SetCursorPos(mouseX, mouseY);
+			GameInput previousInput = {};
+			previousInput.mouse.x = mouseX;
+			previousInput.mouse.y = mouseY;
+			GameInput newInput = {};
+
+			GameState gameState = {};
+			gameState.isRunning = true;
+
+			Cube cube = {};
+			CreateTexturedCube(d3dResource.device, &cube, 1.f);
+			Transform cubeTransforms[] = 
+			{
+				{DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(5.f, -3.5f, -8.f), DirectX::XMFLOAT3(20.f, 17.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(-3.f, -2.5f, -4.f), DirectX::XMFLOAT3(60.f, 35.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(4.f, 4.f, -6.f), DirectX::XMFLOAT3(19.f, 19.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(-5.f, 7.f, -10.f), DirectX::XMFLOAT3(42.5f, 35.7f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(-8.3f, 8.f, -6.f), DirectX::XMFLOAT3(78.f, 45.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{DirectX::XMFLOAT3(1.f, 0.f, -7.6f), DirectX::XMFLOAT3(89.f, 49.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+			};
+
+			Sprite sprite = {};
+			CreateSprite(d3dResource.device, &sprite);
+			ScaleUniform(&sprite.transform, 0.5f);
+
+			Camera camera = {};
+			camera.yaw = -90.f;
+			camera.pitch = 0.f;
+			camera.position = DirectX::XMFLOAT3(0.f, 0.f, 3.f);
+			camera.front = DirectX::XMFLOAT3(0.f, 0.f, -1.f);
+			camera.up = DirectX::XMFLOAT3(0.f, 1.f, 0.f);
+
+			Vector4 backBufferColor = Vector4{0.f, 0.96f, 0.831f, 1.f};
+			D3DClearRenderTarget(&d3dResource, backBufferColor);
 
 			LARGE_INTEGER frequency = {};
 			LARGE_INTEGER perviousFrameTime = {};
 			LARGE_INTEGER currentFrameTime = {};
 			QueryPerformanceFrequency(&frequency);
 			QueryPerformanceCounter(&perviousFrameTime);
-
-			GameInput input = {};
-			GameState gameState = {};
-			gameState.isRunning = true;
-
-			Cube cube = {};
-			CreateCube(d3dResource.device, &cube, 3.f);
-			Transform cubeTransforms[] = 
-			{
-				{DirectX::XMFLOAT3(0.f, 0.f, -18.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				{DirectX::XMFLOAT3(20.f, -10.5f, -22.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				{DirectX::XMFLOAT3(-12.f, -5.5f, -16.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				{DirectX::XMFLOAT3(26.f, 16.f, -42.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				{DirectX::XMFLOAT3(-32.f, 19.f, -66.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				{DirectX::XMFLOAT3(-28.3f, 15.f, -29.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				{DirectX::XMFLOAT3(50.f, 0.f, -90.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-			};
-
-			Sprite sprite = {};
-			CreateSprite(d3dResource.device, &sprite);
-			ScaleUniform(&sprite.transform, 0.5f);
 
 			while (gameState.isRunning)
 			{
@@ -381,54 +689,38 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				perviousFrameTime = currentFrameTime;
 
 				//
-				// NOTE: Handle input
+				// NOTE: Windows message and input processing
 				//
-				GameMouseInput* mouse = &input.mouse;
-				GameControllerInput* keyboard = &input.controllers[0];
-				Win32ProcessPendingMessages(window, &d3dResource, mouse, keyboard, &gameState);
+				UpdateInputState(&previousInput, &newInput);
+				Win32ProcessPendingMessages(window, &d3dResource, &newInput.mouse, &newInput.keyboard, &gameState);
+				Win32ProcessXInputControllers(&previousInput, &newInput);
 
-				if (keyboard->escape.endedDown)
+				if (newInput.keyboard.escape.endedDown)
 				{
 					gameState.isRunning = false;
 				}
 
-				if (keyboard->k.endedDown)
+				if (newInput.keyboard.k.endedDown)
 				{
 					D3DSetRasterizerWireframeMode(&d3dResource);
 				}
 
-				if (keyboard->m.endedDown)
+				if (newInput.keyboard.m.endedDown)
 				{
 					D3DSetRasterizerSolidMode(&d3dResource);
 				}
 
-				if (keyboard->one.endedDown)
+				if (newInput.keyboard.one.endedDown)
 				{
 					D3DGoWindowed(&d3dResource);
 				}
 
-				if (keyboard->two.endedDown)
+				if (newInput.keyboard.two.endedDown)
 				{
 					D3DGoFullscreen(&d3dResource);
 				}
 
-				Vector4 backBufferColor = Vector4{ 0.f, 0.96f, 0.831f, 1.f }; // 0,245,212
-				if (keyboard->w.endedDown)
-				{
-					backBufferColor = Vector4{ 0.f, 0.733f, 0.976f, 1.f }; // 0,187,249
-				}
-				if (keyboard->a.endedDown)
-				{
-					backBufferColor = Vector4{ 0.996f, 0.894f, 0.251f, 1.f }; // 254,228,64
-				}
-				if (keyboard->s.endedDown)
-				{
-					backBufferColor = Vector4{ 0.945f, 0.356f, 0.709f, 1.f }; // 241,91,181
-				}
-				if (keyboard->d.endedDown)
-				{
-					backBufferColor = Vector4{ 0.607f, 0.364f, 0.898f, 1.f }; // 155,93,229
-				}
+				HandleCameraMovement(&gameState, &previousInput, &newInput, &camera, 5.f, 30.f, 100.f);
 				D3DClearRenderTarget(&d3dResource, backBufferColor);
 
 				//
@@ -440,20 +732,15 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				    (d3dResource.backBufferDescription.Height / 2.f - (sprite.transform.scale.y * sprite.texture.height) / 2.f) - padding,
 				    0.f
 				);
-				ApplyTransform(&sprite.transform, &sprite.renderData.constantBufferData);
+				ApplyWorldTransform(&sprite.transform, &sprite.renderData.constantBufferData);
  				OrthographicProjection(&sprite.renderData.constantBufferData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
 				D3DRender(d3dResource.context, &sprite.renderData, &sprite.texture);
 
 				for (int transformIndex = 0; transformIndex < ARRAYSIZE(cubeTransforms); ++transformIndex)
 				{
 					Transform* cubeTransform = cubeTransforms + transformIndex;
-
-					float rotationSpeed = (transformIndex % 2 == 0) ? 40.f : -25.f;
-					cubeTransform->rotation.x += 0.5f*rotationSpeed*gameState.deltaTime;
-					cubeTransform->rotation.y += rotationSpeed*gameState.deltaTime;
-					cubeTransform->rotation.z = 0.f;
-
-					ApplyTransform(cubeTransform, &cube.renderData.constantBufferData);
+					ApplyWorldTransform(cubeTransform, &cube.renderData.constantBufferData);
+					ApplyCameraTransform(&cube.renderData.constantBufferData, &camera);
 					PerspectiveProjection(&cube.renderData.constantBufferData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
 					D3DRender(d3dResource.context, &cube.renderData, &cube.texture);
 				}
@@ -462,12 +749,18 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				// NOTE: Note present the buffer
 				//
 				D3DPresent(d3dResource.dxgiSwapChain);
+
+				// NOTE: Swap input state
+				GameInput temp = newInput;
+				newInput = previousInput;
+				previousInput = temp;
 			}
 			
 			//
 			// NOTE: On quit release resources
 			//
 			D3DReleaseAllResources(&d3dResource);
+			DestroyWindow(window);
 		}
 		else
 		{

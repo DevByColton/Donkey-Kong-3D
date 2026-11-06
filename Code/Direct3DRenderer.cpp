@@ -197,11 +197,11 @@ D3DReleaseBackBuffer(D3DResource* d3dResource)
 }
 
 inline void
-ResizeBackBuffer(D3DResource* d3dResource)
+ResizeBackBuffer(D3DResource* d3dResource, unsigned int width, unsigned int height)
 {
 	D3DReleaseBackBuffer(d3dResource);
 
-	HRESULT result = d3dResource->dxgiSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+	HRESULT result = d3dResource->dxgiSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
 	ASSERT_OK(result, "Unable to resize back buffer\n");
 
 	result = D3DConfigureBackBuffer(d3dResource);
@@ -223,7 +223,7 @@ D3DGoFullscreen(D3DResource* d3dResource)
 		HRESULT result = d3dResource->dxgiSwapChain->SetFullscreenState(TRUE, NULL);
 		ASSERT_OK(result, "Unable to SetFullscreenState to TRUE on dxgiSwapChain");
 
-		ResizeBackBuffer(d3dResource);
+		ResizeBackBuffer(d3dResource, 0, 0);
 	}
 }
 
@@ -239,7 +239,7 @@ D3DGoWindowed(D3DResource* d3dResource)
 		HRESULT result = d3dResource->dxgiSwapChain->SetFullscreenState(FALSE, NULL);
 		ASSERT_OK(result, "Unable to SetFullscreenState to FALSE on dxgiSwapChain");
 
-		ResizeBackBuffer(d3dResource);
+		ResizeBackBuffer(d3dResource, 1280, 720);
 	}
 }
 
@@ -313,7 +313,10 @@ D3DPresent(IDXGISwapChain* dxgiSwapChain)
 internal_link void
 D3DReleaseAllResources(D3DResource* d3dResource)
 {
+	d3dResource->context->ClearState();
 	d3dResource->context->Flush();
+	HRESULT result = d3dResource->dxgiSwapChain->SetFullscreenState(FALSE, NULL);
+	ASSERT_OK(result, "Unable to SetFullscreenState to FALSE on dxgiSwapChain");
 	d3dResource->renderTarget->Release();
 	d3dResource->depthStencilView->Release();
 	d3dResource->depthStencil->Release();
@@ -554,7 +557,7 @@ GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1Fi
 }
 
 internal_link void
-ApplyTransform(Transform* transform, ConstantBufferData* constantBuffer)
+ApplyWorldTransform(Transform* transform, ConstantBufferData* constantBuffer)
 {
 	DirectX::XMMATRIX model = DirectX::XMMatrixIdentity();
 
@@ -576,34 +579,36 @@ ApplyTransform(Transform* transform, ConstantBufferData* constantBuffer)
 	// Angles are measured clockwise when looking along the rotation axis toward the origin. 
 	// This is a left-handed coordinate system. 
 	// To use right-handed coordinates, negate all three angles
-	DirectX::XMVECTOR quaternion = DirectX::XMQuaternionRotationRollPitchYaw(
+	DirectX::XMMATRIX rotation = DirectX::XMMatrixRotationRollPitchYaw(
 		-DirectX::XMConvertToRadians(transform->rotation.x),
 		-DirectX::XMConvertToRadians(transform->rotation.y),
 		-DirectX::XMConvertToRadians(transform->rotation.z)
 	);
-	DirectX::XMMATRIX rotation = DirectX::XMMatrixRotationQuaternion(quaternion);
 	model = DirectX::XMMatrixMultiply(model, rotation);
 
 	//
 	// NOTE: Translate
 	//
-	DirectX::XMMATRIX translation = DirectX::XMMatrixTranslation(0.f, 0.f, 0.f);
-	model = DirectX::XMMatrixMultiply(model, translation);
-
-	//
-	// NOTE: Store the model after transforms
-	//
-	DirectX::XMStoreFloat4x4(&constantBuffer->model, DirectX::XMMatrixTranspose(model));
-
-	//
-	// NOTE: Store view
-	//
-	DirectX::XMMATRIX view = DirectX::XMMatrixTranslation(
+	DirectX::XMMATRIX translation = DirectX::XMMatrixTranslation(
 		transform->position.x, 
 		transform->position.y, 
 		transform->position.z
 	);
-	DirectX::XMStoreFloat4x4(&constantBuffer->view, DirectX::XMMatrixTranspose(view));
+	model = DirectX::XMMatrixMultiply(model, translation);
+
+	DirectX::XMStoreFloat4x4(&constantBuffer->model, DirectX::XMMatrixTranspose(model));
+}
+
+internal_link void
+ApplyCameraTransform(ConstantBufferData* constantBuffer, Camera* camera)
+{
+	DirectX::FXMVECTOR position = DirectX::XMLoadFloat3(&camera->position);
+	DirectX::FXMVECTOR front = DirectX::XMLoadFloat3(&camera->front);
+	DirectX::FXMVECTOR up = DirectX::XMLoadFloat3(&camera->up);
+	DirectX::FXMVECTOR focalPoint = DirectX::XMVectorAdd(position, front);
+
+	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(position, focalPoint, up);
+	DirectX::XMStoreFloat4x4(&constantBuffer->view, DirectX::XMMatrixTranspose(view));	
 }
 
 inline void
@@ -656,43 +661,8 @@ CreateSprite(ID3D11Device* device, Sprite* sprite)
 }
 
 internal_link void
-CreateCube(ID3D11Device* device, Cube* cube, float size)
+CreateTexturedCube(ID3D11Device* device, Cube* cube, float size)
 {
-#if 0
-	VertexPositionColor verticies[] =
-	{
-		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(0.f, 0.f, 0.f)}, // 0
-		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},  // 1
-		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},  // 2
-		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(0.f, 1.f, 1.f)},   // 3
-
-		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},  // 4
-		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 0.f, 1.f)},   // 5
-		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 0.f)},   // 6
-		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},    // 7
-	};
-
-	unsigned short indices[] =
-	{
-		0,2,1, // -x
-		1,2,3,
-
-		4,5,6, // +x
-		5,7,6,
-
-		0,1,5, // -y
-		0,5,4,
-
-		2,6,7, // +y
-		2,7,3,
-
-		0,4,6, // -z
-		0,6,2,
-
-		1,3,7, // +z
-		1,7,5,
-	};
-#else
 	VertexPositionColor verticies[] =
 	{
 		// -X face
@@ -741,15 +711,71 @@ CreateCube(ID3D11Device* device, Cube* cube, float size)
 		16,17,18, 18,17,19, // -Z
 		21,20,22, 22,21,23, // +Z
 	};
-#endif
 
 	CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &cube->renderData);
 	CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &cube->renderData);
-
-#if 0	
-	LoadShaders(device, &cube->renderData, "BasicVertexShader.cso", "BasicPixelShader.cso");
-#else
 	LoadShaders(device, &cube->renderData, "BasicVertexShader.cso", "BasicTexturePixelShader.cso");
 	GenerateTexture(device, &cube->texture, "WoodContainer.jpg", "AwesomeFace.png");
-#endif
 }
+
+#if 0
+//
+// TODO: Microsoft docs reccomend switching the IDXGISwapChain1 for more modern fullscreen behavior
+// This is the base setup, but I need to implement all of the things for IDXGISwapChain1
+//
+internal_link HRESULT
+D3DCreateSwapChain2(D3DResource* d3dResource, HWND window)
+{
+	DXGI_SWAP_CHAIN_DESC1 dxgiDescription;
+	ZeroMemory(&dxgiDescription, sizeof(DXGI_SWAP_CHAIN_DESC1));
+	dxgiDescription.Width = 0;
+	dxgiDescription.Height = 0;
+	dxgiDescription.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	dxgiDescription.Stereo = TRUE;
+	dxgiDescription.SampleDesc.Count = 1;
+	dxgiDescription.SampleDesc.Quality = 0;
+	dxgiDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	dxgiDescription.BufferCount = 2;
+	dxgiDescription.Scaling = DXGI_SCALING_ASPECT_RATIO_STRETCH;
+	dxgiDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+	dxgiDescription.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+
+	DXGI_SWAP_CHAIN_FULLSCREEN_DESC dxgiFullScreenDescription;
+	ZeroMemory(&dxgiFullScreenDescription, sizeof(DXGI_SWAP_CHAIN_FULLSCREEN_DESC));
+	dxgiFullScreenDescription.RefreshRate.Numerator = 0;
+	dxgiFullScreenDescription.RefreshRate.Denominator = 1;
+	dxgiFullScreenDescription.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+	dxgiFullScreenDescription.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+	dxgiFullScreenDescription.Windowed = FALSE;
+
+	IDXGIDevice* dxgiDevice = {0};
+	HRESULT result = d3dResource->device->QueryInterface(__uuidof(IDXGIDevice), (void **)&dxgiDevice);
+	ASSERT_OK(result, "Cannot create dxgiDevice");
+
+	//
+	// NOTE: Get the adapter
+	//
+	IDXGIAdapter* dxgiAdapter = {0};
+	result = dxgiDevice->GetAdapter(&dxgiAdapter);
+	ASSERT_OK(result, "Cannot create dxgiAdapter");
+
+	//
+	// NOTE: Create the swap chain
+	//
+	IDXGIFactory2* dxgiFactory = {0};
+	dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
+	result = dxgiFactory->CreateSwapChainForHwnd(
+		d3dResource->device,
+		window,
+		&dxgiDescription,
+		&dxgiFullScreenDescription,
+		NULL, 
+		&d3dResource->dxgiSwapChain1
+	);
+	ASSERT_OK(result, "Cannot create dxgiSwapChain");
+
+	D3DConfigureBackBuffer(d3dResource);
+
+	return result;
+}
+#endif

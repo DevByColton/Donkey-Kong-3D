@@ -47,6 +47,9 @@ struct D3DResource
     ID3D11DepthStencilView* depthStencilView = {0};
 
     ID3D11RasterizerState* rasterizerState = {0};
+
+    // TODO: implement this, base setup method is already defined
+    // IDXGISwapChain1* dxgiSwapChain1 = {0};
 };
 
 struct Texture2D
@@ -65,6 +68,16 @@ struct Transform
     DirectX::XMFLOAT3 position = {};
     DirectX::XMFLOAT3 rotation = {};
     DirectX::XMFLOAT3 scale = {};
+};
+
+struct Camera
+{
+    float pitch = {};
+    float yaw = {};
+    
+    DirectX::XMFLOAT3 position = {};
+    DirectX::XMFLOAT3 front = {};
+    DirectX::XMFLOAT3 up = {};
 };
 
 #endif // DIRECTX_H

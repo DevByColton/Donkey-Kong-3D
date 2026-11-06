@@ -53,43 +53,15 @@ struct GameMouseInput
 	};
 };
 
-struct GameControllerInput
+struct GameKeyboardInput
 {
-	bool isConnected = false;
-	Vector2 leftThumbstick = {};
-	Vector2 rightThumbstick = {};
-	float leftTrigger = {};
-	float rightTrigger = {};
-	float leftMotorVibrationSpeed = {};
-	float rightMotorVibrationSpeed = {};
-	
+	bool isConnected = true;
+
 	union
 	{
-		// NOTE: Make sure to update button count when modifying buttons
-		GameButton buttons[36];
-		struct
+		GameButton buttons[18];
+		struct 
 		{
-			// Gamepad buttons
-			GameButton primary;
-			GameButton secondary;
-			GameButton tertiary;
-			GameButton quaternary;
-			GameButton leftShoulder;
-			GameButton rightShoulder;
-			GameButton leftThumbClick;
-			GameButton rightThumbClick;
-			GameButton dPadUp;
-			GameButton dPadDown;
-			GameButton dPadLeft;
-			GameButton dPadRight;
-			GameButton leftThumbstickUp;
-			GameButton leftThumbstickDown;
-			GameButton leftThumbstickLeft;
-			GameButton leftThumbstickRight;
-			GameButton back;
-			GameButton start;
-
-			// Keyboard buttons
 			GameButton w;
 			GameButton a;
 			GameButton s;
@@ -112,12 +84,49 @@ struct GameControllerInput
 	};
 };
 
+struct GameControllerInput
+{
+	bool isConnected = false;
+	Vector2 leftThumbstick = {};
+	Vector2 rightThumbstick = {};
+	float leftTrigger = {};
+	float rightTrigger = {};
+	float leftMotorVibrationSpeed = {};
+	float rightMotorVibrationSpeed = {};
+	
+	union
+	{
+		GameButton buttons[18];
+		struct
+		{
+			// Gamepad buttons
+			GameButton primary;
+			GameButton secondary;
+			GameButton tertiary;
+			GameButton quaternary;
+			GameButton leftShoulder;
+			GameButton rightShoulder;
+			GameButton leftThumbClick;
+			GameButton rightThumbClick;
+			GameButton dPadUp;
+			GameButton dPadDown;
+			GameButton dPadLeft;
+			GameButton dPadRight;
+			GameButton leftThumbstickUp;
+			GameButton leftThumbstickDown;
+			GameButton leftThumbstickLeft;
+			GameButton leftThumbstickRight;
+			GameButton back;
+			GameButton start;
+		};
+	};
+};
+
 struct GameInput
 {
-	// index 0 = keyboard
-	// index 1 - 4 = controllers
-	GameControllerInput controllers[5] = {};
 	GameMouseInput mouse = {};
+	GameKeyboardInput keyboard = {};
+	GameControllerInput controllers[4] = {};
 };
 
 struct Sprite
@@ -137,7 +146,9 @@ struct GameState
 {
 	float deltaTime = {};
 	float totalTime = {};
+	
 	bool isRunning = false;
+	bool isFocused = false;
 };
 
 #endif // WIN32MAIN_H
