@@ -7,12 +7,14 @@
 #include <d3d11.h>
 #include <dxgi1_3.h>
 #include <DirectXMath.h>
+#include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#include "Direct3DRenderer.h"
 #include "Types.h"
+#include "Direct3DRenderer.h"
+#include "WavefrontObjParser.h"
 
 #define WM_APP_SIZE (WM_APP + 1)
 #define WM_APP_ACTIVATEAPP (WM_APP + 2)

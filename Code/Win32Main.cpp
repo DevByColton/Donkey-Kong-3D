@@ -648,11 +648,10 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			GameState gameState = {};
 			gameState.isRunning = true;
 
-			Cube cube = {};
-			CreateTexturedCube(d3dResource.device, &cube, 1.f);
-			Transform cubeTransforms[] = 
+			Mesh suzanneMesh = {};
+			CreateMeshFromWavefrontFile(d3dResource.device, &suzanneMesh, "Suzanne.obj");
+			Transform suzanneTransforms[] = 
 			{
-				{DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
 				{DirectX::XMFLOAT3(5.f, -3.5f, -8.f), DirectX::XMFLOAT3(20.f, 17.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
 				{DirectX::XMFLOAT3(-3.f, -2.5f, -4.f), DirectX::XMFLOAT3(60.f, 35.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
 				{DirectX::XMFLOAT3(4.f, 4.f, -6.f), DirectX::XMFLOAT3(19.f, 19.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
@@ -661,6 +660,10 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				{DirectX::XMFLOAT3(1.f, 0.f, -7.6f), DirectX::XMFLOAT3(89.f, 49.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
 			};
 
+			Cube cube = {};
+			CreateTexturedCube(d3dResource.device, &cube, 1.f);
+			Transform cubeTransform = {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
+
 			Sprite sprite = {};
 			CreateSprite(d3dResource.device, &sprite);
 			ScaleUniform(&sprite.transform, 0.5f);
@@ -668,7 +671,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			Camera camera = {};
 			camera.yaw = -90.f;
 			camera.pitch = 0.f;
-			camera.position = DirectX::XMFLOAT3(0.f, 0.f, 3.f);
+			camera.position = DirectX::XMFLOAT3(0.f, 0.f, 6.f);
 			camera.front = DirectX::XMFLOAT3(0.f, 0.f, -1.f);
 			camera.up = DirectX::XMFLOAT3(0.f, 1.f, 0.f);
 
@@ -694,6 +697,39 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				UpdateInputState(&previousInput, &newInput);
 				Win32ProcessPendingMessages(window, &d3dResource, &newInput.mouse, &newInput.keyboard, &gameState);
 				Win32ProcessXInputControllers(&previousInput, &newInput);
+
+				for (unsigned int controllerIndex = 0; controllerIndex < ARRAYSIZE(newInput.controllers); ++controllerIndex)
+				{
+					GameControllerInput* controller = newInput.controllers + controllerIndex;
+					
+					if (controller->isConnected)
+					{
+						if (controller->back.endedDown)
+						{
+							gameState.isRunning = false;
+						}
+
+						if (controller->primary.endedDown)
+						{
+							D3DSetRasterizerWireframeMode(&d3dResource);
+						}
+
+						if (controller->secondary.endedDown)
+						{
+							D3DSetRasterizerSolidMode(&d3dResource);
+						}
+
+						if (controller->rightThumbClick.endedDown)
+						{
+							D3DGoWindowed(&d3dResource);
+						}
+
+						if (controller->leftThumbClick.endedDown)
+						{
+							D3DGoExclusiveFullscreen(&d3dResource);
+						}
+					}
+				}
 
 				if (newInput.keyboard.escape.endedDown)
 				{
@@ -721,29 +757,36 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				}
 
 				HandleCameraMovement(&gameState, &previousInput, &newInput, &camera, 5.f, 30.f, 100.f);
-				D3DClearRenderTarget(&d3dResource, backBufferColor);
 
 				//
 				// NOTE: Update and render
 				//
+				D3DClearRenderTarget(&d3dResource, backBufferColor);
+
+				for (int transformIndex = 0; transformIndex < ARRAYSIZE(suzanneTransforms); ++transformIndex)
+				{
+					Transform* suzanneTransform = suzanneTransforms + transformIndex;
+					ApplyScaleRotationTranslation(suzanneTransform, &suzanneMesh.renderData.constantBufferData);
+					ApplyView(&suzanneMesh.renderData.constantBufferData, &camera);
+					PerspectiveProjection(&suzanneMesh.renderData.constantBufferData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
+					D3DRender(d3dResource.context, &suzanneMesh.renderData);
+				}
+
+				ApplyScaleRotationTranslation(&cubeTransform, &cube.renderData.constantBufferData);
+				ApplyView(&cube.renderData.constantBufferData, &camera);
+				PerspectiveProjection(&cube.renderData.constantBufferData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
+				D3DRender(d3dResource.context, &cube.renderData, &cube.texture);
+
 				float padding = 20.f;
 				sprite.transform.position = DirectX::XMFLOAT3(
 				    (d3dResource.backBufferDescription.Width / 2.f - (sprite.transform.scale.x * sprite.texture.width) / 2.f) - padding,
 				    (d3dResource.backBufferDescription.Height / 2.f - (sprite.transform.scale.y * sprite.texture.height) / 2.f) - padding,
 				    0.f
 				);
-				ApplyWorldTransform(&sprite.transform, &sprite.renderData.constantBufferData);
+				ApplyScaleRotationTranslation(&sprite.transform, &sprite.renderData.constantBufferData);
+				ApplyView(&sprite.renderData.constantBufferData);
  				OrthographicProjection(&sprite.renderData.constantBufferData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
 				D3DRender(d3dResource.context, &sprite.renderData, &sprite.texture);
-
-				for (int transformIndex = 0; transformIndex < ARRAYSIZE(cubeTransforms); ++transformIndex)
-				{
-					Transform* cubeTransform = cubeTransforms + transformIndex;
-					ApplyWorldTransform(cubeTransform, &cube.renderData.constantBufferData);
-					ApplyCameraTransform(&cube.renderData.constantBufferData, &camera);
-					PerspectiveProjection(&cube.renderData.constantBufferData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
-					D3DRender(d3dResource.context, &cube.renderData, &cube.texture);
-				}
 
 				//
 				// NOTE: Note present the buffer

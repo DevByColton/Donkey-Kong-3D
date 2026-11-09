@@ -78,4 +78,23 @@ struct Camera
     DirectX::XMFLOAT3 up = {};
 };
 
+struct Mesh
+{
+    unsigned int vertexTotalCount = {};
+    unsigned int vertexCount = {};
+    VertexPositionColor* vertices = {0};
+    
+    unsigned int indexTotalCount = {};
+    unsigned int indexCount = {};
+    unsigned short* indices = {0};
+
+    RenderData renderData = {};
+
+    ~Mesh() 
+    { 
+        free(vertices);
+        free(indices);
+    }
+};
+
 #endif // DIRECTX_H

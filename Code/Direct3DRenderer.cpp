@@ -165,7 +165,7 @@ D3DCreateSwapChain(D3DResource* d3dResource, HWND window)
 	dxgiFullScreenDescription.RefreshRate.Denominator = 1;
 	dxgiFullScreenDescription.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
 	dxgiFullScreenDescription.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	dxgiFullScreenDescription.Windowed = TRUE;
+	dxgiFullScreenDescription.Windowed = FALSE;
 
 	IDXGIDevice* dxgiDevice = {0};
 	HRESULT result = d3dResource->device->QueryInterface(__uuidof(IDXGIDevice), (void **)&dxgiDevice);
@@ -319,7 +319,7 @@ D3DPresent(D3DResource* d3dResource)
 	//
 	// NOTE: Presenting with vsync enabled
 	//
-	const DXGI_PRESENT_PARAMETERS presentParams{};
+	const DXGI_PRESENT_PARAMETERS presentParams = {};
 	d3dResource->dxgiSwapChain->Present1(1, 0, &presentParams);
 }
 
@@ -338,7 +338,7 @@ D3DReleaseAllResources(D3DResource* d3dResource)
 }
 
 inline void
-CreateVertexBuffer(ID3D11Device* device, VertexPositionColor verticies[], int vertexCount, RenderData* renderData)
+CreateVertexBuffer(ID3D11Device* device, VertexPositionColor verticies[], unsigned int vertexCount, RenderData* renderData)
 {
 	CD3D11_BUFFER_DESC vertexBufferDescription(sizeof(VertexPositionColor) * vertexCount, D3D11_BIND_VERTEX_BUFFER);
 	
@@ -356,7 +356,7 @@ CreateVertexBuffer(ID3D11Device* device, VertexPositionColor verticies[], int ve
 }
 
 inline void
-CreateIndexBuffer(ID3D11Device* device, unsigned short indices[], int indexCount, RenderData* renderData)
+CreateIndexBuffer(ID3D11Device* device, unsigned short indices[], unsigned int indexCount, RenderData* renderData)
 {
 	renderData->indexCount = indexCount;
 
@@ -568,7 +568,7 @@ GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1Fi
 }
 
 internal_link void
-ApplyWorldTransform(Transform* transform, ConstantBufferData* constantBuffer)
+ApplyScaleRotationTranslation(Transform* transform, ConstantBufferData* constantBuffer)
 {
 	DirectX::XMMATRIX model = DirectX::XMMatrixIdentity();
 
@@ -611,14 +611,19 @@ ApplyWorldTransform(Transform* transform, ConstantBufferData* constantBuffer)
 }
 
 internal_link void
-ApplyCameraTransform(ConstantBufferData* constantBuffer, Camera* camera)
+ApplyView(ConstantBufferData* constantBuffer, Camera* camera = 0)
 {
-	DirectX::FXMVECTOR position = DirectX::XMLoadFloat3(&camera->position);
-	DirectX::FXMVECTOR front = DirectX::XMLoadFloat3(&camera->front);
-	DirectX::FXMVECTOR up = DirectX::XMLoadFloat3(&camera->up);
-	DirectX::FXMVECTOR focalPoint = DirectX::XMVectorAdd(position, front);
+	DirectX::XMMATRIX view = DirectX::XMMatrixIdentity();
+	
+	if (camera)
+	{
+		DirectX::FXMVECTOR position = DirectX::XMLoadFloat3(&camera->position);
+		DirectX::FXMVECTOR front = DirectX::XMLoadFloat3(&camera->front);
+		DirectX::FXMVECTOR up = DirectX::XMLoadFloat3(&camera->up);
+		DirectX::FXMVECTOR focalPoint = DirectX::XMVectorAdd(position, front);
+		view = DirectX::XMMatrixLookAtRH(position, focalPoint, up);
+	}
 
-	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(position, focalPoint, up);
 	DirectX::XMStoreFloat4x4(&constantBuffer->view, DirectX::XMMatrixTranspose(view));	
 }
 
@@ -633,10 +638,6 @@ ScaleUniform(Transform* transform, float scale)
 internal_link void
 CreateSprite(ID3D11Device* device, Sprite* sprite)
 {	
-	sprite->transform.position = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
-	sprite->transform.scale = DirectX::XMFLOAT3(1.f, 1.f, 1.f);
-	sprite->transform.rotation = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
-
 	GenerateTexture(device, &sprite->texture, "WoodContainer.jpg", "AwesomeFace.png");
 
 	// TODO: Probably need a better way to check validity?
@@ -653,10 +654,10 @@ CreateSprite(ID3D11Device* device, Sprite* sprite)
 
 		VertexPositionColor verticies[] =
 		{
-			{DirectX::XMFLOAT3(halfWidth, halfHeight, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
-			{DirectX::XMFLOAT3(halfWidth, -halfHeight, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
-			{DirectX::XMFLOAT3(-halfWidth, -halfHeight, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
-			{DirectX::XMFLOAT3(-halfWidth, halfHeight, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
+			{DirectX::XMFLOAT3(halfWidth, halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
+			{DirectX::XMFLOAT3(halfWidth, -halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
+			{DirectX::XMFLOAT3(-halfWidth, -halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
+			{DirectX::XMFLOAT3(-halfWidth, halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
 		};
 
 		unsigned short indices[] = 
@@ -669,6 +670,15 @@ CreateSprite(ID3D11Device* device, Sprite* sprite)
 		CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &sprite->renderData);
 		LoadShaders(device, &sprite->renderData, "BasicVertexShader.cso", "BasicTexturePixelShader.cso");
 	}
+}
+
+internal_link void
+CreateMeshFromWavefrontFile(ID3D11Device* device, Mesh* mesh, const char* objFileName)
+{
+	ParseMeshFromWavefrontFile(mesh, "Suzanne.obj");
+	CreateVertexBuffer(device, mesh->vertices, mesh->vertexCount, &mesh->renderData);
+	CreateIndexBuffer(device,  mesh->indices, mesh->indexCount, &mesh->renderData);
+	LoadShaders(device, &mesh->renderData, "BasicVertexShader.cso", "BasicPixelShader.cso");
 }
 
 internal_link void

@@ -3,7 +3,7 @@
 cls
 
 REM Trying this out, instead of having to use external powershell, this lets me build within sublime text
-@call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
+REM @call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
 
 REM Full Debug -Od -Zo
 set OptimizationFlags=-Od -Zo -Oi -fp:fast
@@ -38,7 +38,7 @@ set ShaderDir=C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Data\
 %fxc% /Fo "%ShaderDir%BasicPixelShader.cso" /T ps_5_0 "%ShaderDir%BasicPixelShader.hlsl"
 %fxc% /Fo "%ShaderDir%BasicTexturePixelShader.cso" /T ps_5_0 "%ShaderDir%BasicTexturePixelShader.hlsl"
 
-REM cl %CommonCompilerFlags% "C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Code\Win32Main.cpp" -FmDonkeyKong3D.map -link -subsystem:windows -out:"Donkey Kong 3D.exe" %CommonLinkerFlags%
-"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\cl.exe" %CommonCompilerFlags% "C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Code\Win32Main.cpp" -FmDonkeyKong3D.map -link -subsystem:windows -out:"Donkey Kong 3D.exe" %CommonLinkerFlags%
+cl %CommonCompilerFlags% "C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Code\Win32Main.cpp" -FmDonkeyKong3D.map -link -subsystem:windows -out:"Donkey Kong 3D.exe" %CommonLinkerFlags%
+REM "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\cl.exe" %CommonCompilerFlags% "C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Code\Win32Main.cpp" -FmDonkeyKong3D.map -link -subsystem:windows -out:"Donkey Kong 3D.exe" %CommonLinkerFlags%
 
 popd
