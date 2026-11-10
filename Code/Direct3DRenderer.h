@@ -13,7 +13,6 @@ struct ConstantBufferData
     DirectX::XMFLOAT4X4 model = {};
     DirectX::XMFLOAT4X4 view = {};
     DirectX::XMFLOAT4X4 projection = {};
-    DirectX::XMFLOAT4 colorModulation = {};
 };
 static_assert((sizeof(ConstantBufferData) % 16) == 0, "ConstantBufferData size must be 16-byte aligned");
 
@@ -59,6 +58,7 @@ struct VertexShader
 struct Shaders
 {
     VertexShader baseVertexShader = {};
+    VertexShader baseTextureVertexShader = {};
 
     ID3D11PixelShader* basePixelShader = {0};
     ID3D11PixelShader* baseTexturePixelShader = {0};

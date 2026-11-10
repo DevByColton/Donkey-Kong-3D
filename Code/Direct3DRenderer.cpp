@@ -437,7 +437,20 @@ CreatePixelShaderFromFile(ID3D11Device* device, ID3D11PixelShader** pixelShader,
 internal_link void
 LoadAllShaders(ID3D11Device* device, Shaders* shaders)
 {
-	D3D11_INPUT_ELEMENT_DESC baseVertexShaderInputAssemblerDescription[] =
+	D3D11_INPUT_ELEMENT_DESC baseVertexShaderIADesc[] =
+	{
+	    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+	CreateVertexShaderFromFile(
+		device, 
+		&shaders->baseVertexShader,
+		"BaseVertexShader.cso",
+		baseVertexShaderIADesc, 
+		ARRAYSIZE(baseVertexShaderIADesc)
+	);
+
+	D3D11_INPUT_ELEMENT_DESC baseTextureVertexShaderIADesc[] =
 	{
 	    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -445,14 +458,14 @@ LoadAllShaders(ID3D11Device* device, Shaders* shaders)
 	};
 	CreateVertexShaderFromFile(
 		device, 
-		&shaders->baseVertexShader,
-		"BasicVertexShader.cso",
-		baseVertexShaderInputAssemblerDescription, 
-		ARRAYSIZE(baseVertexShaderInputAssemblerDescription)
+		&shaders->baseTextureVertexShader,
+		"BaseTextureVertexShader.cso",
+		baseTextureVertexShaderIADesc, 
+		ARRAYSIZE(baseTextureVertexShaderIADesc)
 	);
 
-	CreatePixelShaderFromFile(device, &shaders->basePixelShader, "BasicPixelShader.cso");
-	CreatePixelShaderFromFile(device, &shaders->baseTexturePixelShader, "BasicTexturePixelShader.cso");
+	CreatePixelShaderFromFile(device, &shaders->basePixelShader, "BasePixelShader.cso");
+	CreatePixelShaderFromFile(device, &shaders->baseTexturePixelShader, "BaseTexturePixelShader.cso");
 }
 
 internal_link void
@@ -661,8 +674,8 @@ CreateSprite(ID3D11Device* device, Shaders* shaders, Sprite* sprite)
 		CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &sprite->renderData);
 		CreateConstantBuffer(device, &sprite->renderData.constantBuffer);
 
-		sprite->renderData.vertexShader = shaders->baseVertexShader.shader;
-		sprite->renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+		sprite->renderData.vertexShader = shaders->baseTextureVertexShader.shader;
+		sprite->renderData.inputLayout = shaders->baseTextureVertexShader.inputLayout;
 		sprite->renderData.pixelShader = shaders->baseTexturePixelShader;
 	}
 }
@@ -737,7 +750,7 @@ CreateTexturedCube(ID3D11Device* device, Shaders* shaders, Cube* cube, float siz
 	CreateConstantBuffer(device, &cube->renderData.constantBuffer);
 	GenerateTexture(device, &cube->texture, "WoodContainer.jpg", "AwesomeFace.png");
 
-	cube->renderData.vertexShader = shaders->baseVertexShader.shader;
-	cube->renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+	cube->renderData.vertexShader = shaders->baseTextureVertexShader.shader;
+	cube->renderData.inputLayout = shaders->baseTextureVertexShader.inputLayout;
 	cube->renderData.pixelShader = shaders->baseTexturePixelShader;
 }
