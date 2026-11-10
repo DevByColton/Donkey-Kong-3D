@@ -50,6 +50,20 @@ struct D3DResource
     ID3D11RasterizerState* rasterizerState = {0};
 };
 
+struct VertexShader
+{
+    ID3D11InputLayout* inputLayout = {0};
+    ID3D11VertexShader* shader = {0};
+};
+
+struct Shaders
+{
+    VertexShader baseVertexShader = {};
+
+    ID3D11PixelShader* basePixelShader = {0};
+    ID3D11PixelShader* baseTexturePixelShader = {0};
+};
+
 struct Texture2D
 {
     int width = {};

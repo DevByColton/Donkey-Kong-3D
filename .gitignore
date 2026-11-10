@@ -80,7 +80,7 @@ StyleCopReport.xml
 *_h.h
 *.ilk
 *.meta
-*.obj
+# *.obj ignoring this because of Wavefront.obj
 *.iobj
 *.pch
 *.pdb

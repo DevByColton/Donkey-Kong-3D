@@ -645,11 +645,11 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			previousInput.mouse.y = mouseY;
 			GameInput newInput = {};
 
-			GameState gameState = {};
-			gameState.isRunning = true;
+			Shaders shaders = {};
+			LoadAllShaders(d3dResource.device, &shaders);
 
 			Mesh suzanneMesh = {};
-			CreateMeshFromWavefrontFile(d3dResource.device, &suzanneMesh, "Suzanne.obj");
+			CreateMeshFromWavefrontFile(d3dResource.device, &shaders, &suzanneMesh, "Suzanne.obj");
 			Transform suzanneTransforms[] = 
 			{
 				{DirectX::XMFLOAT3(5.f, -3.5f, -8.f), DirectX::XMFLOAT3(20.f, 17.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
@@ -661,11 +661,11 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			};
 
 			Cube cube = {};
-			CreateTexturedCube(d3dResource.device, &cube, 1.f);
+			CreateTexturedCube(d3dResource.device, &shaders, &cube, 1.f);
 			Transform cubeTransform = {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
 
 			Sprite sprite = {};
-			CreateSprite(d3dResource.device, &sprite);
+			CreateSprite(d3dResource.device, &shaders, &sprite);
 			ScaleUniform(&sprite.transform, 0.5f);
 
 			Camera camera = {};
@@ -684,6 +684,8 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			QueryPerformanceFrequency(&frequency);
 			QueryPerformanceCounter(&perviousFrameTime);
 
+			GameState gameState = {};
+			gameState.isRunning = true;
 			while (gameState.isRunning)
 			{
 				QueryPerformanceCounter(&currentFrameTime);

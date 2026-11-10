@@ -349,10 +349,7 @@ CreateVertexBuffer(ID3D11Device* device, VertexPositionColor verticies[], unsign
 	vertexData.SysMemSlicePitch = 0;
 
 	HRESULT result = device->CreateBuffer(&vertexBufferDescription, &vertexData, &renderData->vertexBuffer);
-	if (FAILED(result))
-	{
-		OutputDebugStringA("Unable to create sprite vertex buffer\n");
-	}
+	ASSERT_OK(result, "Unable to create vertex buffer");
 }
 
 inline void
@@ -369,99 +366,93 @@ CreateIndexBuffer(ID3D11Device* device, unsigned short indices[], unsigned int i
     indexData.SysMemSlicePitch = 0;
 
     HRESULT result = device->CreateBuffer(&indexBufferDescription, &indexData, &renderData->indexBuffer);
-    if (FAILED(result))
-    {
-    	OutputDebugStringA("Unable to create sprite index buffer\n");
-    }
+    ASSERT_OK(result, "Unable to create index buffer");
 }
 
-internal_link void
-LoadShaders(ID3D11Device* device, RenderData* renderData, const char* vertexShaderFilename, const char* pixelShaderFilename)
+inline void
+CreateConstantBuffer(ID3D11Device* device, ID3D11Buffer** constantBuffer)
 {
+	CD3D11_BUFFER_DESC constantBufferDescription(sizeof(ConstantBufferData), D3D11_BIND_CONSTANT_BUFFER);
+	HRESULT result = device->CreateBuffer(&constantBufferDescription, 0, constantBuffer);
+	ASSERT_OK(result, "Unable to create constant buffer");
+}
+
+inline void
+CreateVertexShaderFromFile(ID3D11Device* device, VertexShader* vertexShader, const char* vertexShaderFilename,
+						   D3D11_INPUT_ELEMENT_DESC inputAssemblerDescription[], unsigned int inputAssemblerDescriptionCount)
+{
+	assert(vertexShaderFilename);
+
 	size_t destSize = 4096;
 	size_t bytesRead = 0;
-
 	FILE* vertexShaderFile = {0};
-	FILE* pixelShaderFile = {0};
-	BYTE* bytes = new BYTE[destSize];
 
-	HRESULT result = S_OK;
-	errno_t openFileResult = 0;
-
-	//
-	// NOTE: Vertex shader file load
-	//
-	if (vertexShaderFilename)
+	errno_t openFileResult = fopen_s(&vertexShaderFile, vertexShaderFilename, "rb");
+	if (openFileResult == 0)
 	{
-		openFileResult = fopen_s(&vertexShaderFile, vertexShaderFilename, "rb");
-		if (openFileResult == 0)
-		{
-			bytesRead = fread_s(bytes, destSize, 1, 4096, vertexShaderFile);
+		BYTE* bytes = (BYTE*)malloc(destSize * sizeof(BYTE));
+		bytesRead = fread_s(bytes, destSize, 1, 4096, vertexShaderFile);
 
-			result = device->CreateVertexShader(bytes, bytesRead, nullptr, &renderData->vertexShader);
-			if (FAILED(result))
-			{
-				OutputDebugStringA("Unable to read: ");
-				OutputDebugStringA(vertexShaderFilename);
-				OutputDebugStringA("\n");
-			}
-		}
-
-		D3D11_INPUT_ELEMENT_DESC inputAssemblerDescription[] =
-		{
-		    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		    { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-		};
+		HRESULT result = device->CreateVertexShader(bytes, bytesRead, 0, &vertexShader->shader);
+		ASSERT_OK(result, "Unable to create vertex shader");
 
 		result = device->CreateInputLayout(
 			inputAssemblerDescription, 
-			ARRAYSIZE(inputAssemblerDescription), 
+			inputAssemblerDescriptionCount, 
 			bytes, 
 			bytesRead, 
-			&renderData->inputLayout
+			&vertexShader->inputLayout
 		);
-		if (FAILED(result))
-		{
-			OutputDebugStringA("Unable to create input layout\n");
-		}
+		
+		free(bytes);
+		fclose(vertexShaderFile);
 
-		delete bytes;
-		bytes = new BYTE[destSize];
-		bytesRead = 0;
+		ASSERT_OK(result, "Unable to create vertex input layout");
 	}
+}
 
-	//
-	// NOTE: Pixel shader file load
-	//
-	if (pixelShaderFilename)
+inline void
+CreatePixelShaderFromFile(ID3D11Device* device, ID3D11PixelShader** pixelShader, const char* pixelShaderFilename)
+{
+	assert(pixelShaderFilename);
+
+	size_t destSize = 4096;
+	size_t bytesRead = 0;
+	FILE* pixelShaderFile = {0};
+
+	errno_t openFileResult = fopen_s(&pixelShaderFile, pixelShaderFilename, "rb");
+	if (openFileResult == 0)
 	{
-		openFileResult = fopen_s(&pixelShaderFile, pixelShaderFilename, "rb");
-		if (openFileResult == 0)
-		{
-			bytesRead = fread_s(bytes, destSize, 1, 4096, pixelShaderFile);
+		BYTE* bytes = (BYTE*)malloc(destSize * sizeof(BYTE));
+		bytesRead = fread_s(bytes, destSize, 1, 4096, pixelShaderFile);
 
-			result = device->CreatePixelShader(bytes, bytesRead, 0, &renderData->pixelShader);
-			if (FAILED(result))
-			{
-				OutputDebugStringA("Unable to read: ");
-				OutputDebugStringA(pixelShaderFilename);
-				OutputDebugStringA("\n");
-			}
-		}
-
-		delete bytes;
-
-		CD3D11_BUFFER_DESC constantBufferDescription(sizeof(ConstantBufferData), D3D11_BIND_CONSTANT_BUFFER);
-		result = device->CreateBuffer(&constantBufferDescription, 0, &renderData->constantBuffer);
-		if (FAILED(result))
-		{
-			OutputDebugStringA("Unable to create constant buffer\n");
-		}
+		HRESULT result = device->CreatePixelShader(bytes, bytesRead, 0, pixelShader);
+		ASSERT_OK(result, "Unable to create pixel shader");
+		
+		free(bytes);
+		fclose(pixelShaderFile);
 	}
+}
 
-	fclose(vertexShaderFile);
-	fclose(pixelShaderFile);
+internal_link void
+LoadAllShaders(ID3D11Device* device, Shaders* shaders)
+{
+	D3D11_INPUT_ELEMENT_DESC baseVertexShaderInputAssemblerDescription[] =
+	{
+	    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+	CreateVertexShaderFromFile(
+		device, 
+		&shaders->baseVertexShader,
+		"BasicVertexShader.cso",
+		baseVertexShaderInputAssemblerDescription, 
+		ARRAYSIZE(baseVertexShaderInputAssemblerDescription)
+	);
+
+	CreatePixelShaderFromFile(device, &shaders->basePixelShader, "BasicPixelShader.cso");
+	CreatePixelShaderFromFile(device, &shaders->baseTexturePixelShader, "BasicTexturePixelShader.cso");
 }
 
 internal_link void
@@ -636,7 +627,7 @@ ScaleUniform(Transform* transform, float scale)
 }
 
 internal_link void
-CreateSprite(ID3D11Device* device, Sprite* sprite)
+CreateSprite(ID3D11Device* device, Shaders* shaders, Sprite* sprite)
 {	
 	GenerateTexture(device, &sprite->texture, "WoodContainer.jpg", "AwesomeFace.png");
 
@@ -668,21 +659,29 @@ CreateSprite(ID3D11Device* device, Sprite* sprite)
 
 		CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &sprite->renderData);
 		CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &sprite->renderData);
-		LoadShaders(device, &sprite->renderData, "BasicVertexShader.cso", "BasicTexturePixelShader.cso");
+		CreateConstantBuffer(device, &sprite->renderData.constantBuffer);
+
+		sprite->renderData.vertexShader = shaders->baseVertexShader.shader;
+		sprite->renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+		sprite->renderData.pixelShader = shaders->baseTexturePixelShader;
 	}
 }
 
 internal_link void
-CreateMeshFromWavefrontFile(ID3D11Device* device, Mesh* mesh, const char* objFileName)
+CreateMeshFromWavefrontFile(ID3D11Device* device, Shaders* shaders, Mesh* mesh, const char* objFileName)
 {
 	ParseMeshFromWavefrontFile(mesh, "Suzanne.obj");
 	CreateVertexBuffer(device, mesh->vertices, mesh->vertexCount, &mesh->renderData);
 	CreateIndexBuffer(device,  mesh->indices, mesh->indexCount, &mesh->renderData);
-	LoadShaders(device, &mesh->renderData, "BasicVertexShader.cso", "BasicPixelShader.cso");
+	CreateConstantBuffer(device, &mesh->renderData.constantBuffer);
+
+	mesh->renderData.vertexShader = shaders->baseVertexShader.shader;
+	mesh->renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+	mesh->renderData.pixelShader = shaders->basePixelShader;
 }
 
 internal_link void
-CreateTexturedCube(ID3D11Device* device, Cube* cube, float size)
+CreateTexturedCube(ID3D11Device* device, Shaders* shaders, Cube* cube, float size)
 {
 	VertexPositionColor verticies[] =
 	{
@@ -735,6 +734,10 @@ CreateTexturedCube(ID3D11Device* device, Cube* cube, float size)
 
 	CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &cube->renderData);
 	CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &cube->renderData);
-	LoadShaders(device, &cube->renderData, "BasicVertexShader.cso", "BasicTexturePixelShader.cso");
+	CreateConstantBuffer(device, &cube->renderData.constantBuffer);
 	GenerateTexture(device, &cube->texture, "WoodContainer.jpg", "AwesomeFace.png");
+
+	cube->renderData.vertexShader = shaders->baseVertexShader.shader;
+	cube->renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+	cube->renderData.pixelShader = shaders->baseTexturePixelShader;
 }
