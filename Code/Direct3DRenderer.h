@@ -1,28 +1,35 @@
 #ifndef DIRECTX_H
 #define DIRECTX_H
 
-struct VertexPositionColor
+struct LightData
 {
-    DirectX::XMFLOAT3 position = {};
-    DirectX::XMFLOAT3 color = {};
-    DirectX::XMFLOAT2 texCoord = {};
+    DirectX::XMFLOAT4 ambientStrength = {};
+    DirectX::XMFLOAT4 lightColor = {};
+    DirectX::XMFLOAT4 lightPosition = {};
+};
+static_assert((sizeof(LightData) % 16) == 0, "LightData size must be 16-byte aligned");
+
+struct LightSource
+{
+    ID3D11Buffer* buffer = {0};
+    LightData data = {};
 };
 
-struct ConstantBufferData
+struct ModelViewProjectionData
 {
     DirectX::XMFLOAT4X4 model = {};
     DirectX::XMFLOAT4X4 view = {};
     DirectX::XMFLOAT4X4 projection = {};
 };
-static_assert((sizeof(ConstantBufferData) % 16) == 0, "ConstantBufferData size must be 16-byte aligned");
+static_assert((sizeof(ModelViewProjectionData) % 16) == 0, "ModelViewProjectionData size must be 16-byte aligned");
 
 struct RenderData
 {
     int indexCount = {};
     ID3D11Buffer* vertexBuffer = {0};
     ID3D11Buffer* indexBuffer = {0};
-    ID3D11Buffer* constantBuffer = {0};
-    ConstantBufferData constantBufferData = {};
+    ID3D11Buffer* modelViewProjectionBuffer = {0};
+    ModelViewProjectionData modelViewProjectionData = {};
     ID3D11VertexShader* vertexShader = {0};
     ID3D11PixelShader* pixelShader = {0};
     ID3D11InputLayout* inputLayout = {0};
@@ -61,7 +68,9 @@ struct Shaders
     VertexShader baseTextureVertexShader = {};
 
     ID3D11PixelShader* basePixelShader = {0};
+    ID3D11PixelShader* lightingPixelShader = {0};
     ID3D11PixelShader* baseTexturePixelShader = {0};
+    ID3D11PixelShader* lightingTexturePixelShader = {0};
 };
 
 struct Texture2D
@@ -92,14 +101,27 @@ struct Camera
     DirectX::XMFLOAT3 up = {};
 };
 
+struct Vertex
+{
+    DirectX::XMFLOAT3 position = {};
+    DirectX::XMFLOAT3 color = {};
+    DirectX::XMFLOAT2 texCoord = {};
+    DirectX::XMFLOAT3 normal = {};
+    DirectX::XMFLOAT3 worldPosition = {};
+};
+
+struct VertexColor
+{
+    DirectX::XMFLOAT3 position = {};
+    DirectX::XMFLOAT3 color = {};
+};
+
 struct Mesh
 {
-    unsigned int vertexTotalCount = {};
-    unsigned int vertexCount = {};
-    VertexPositionColor* vertices = {0};
-    
-    unsigned int indexTotalCount = {};
-    unsigned int indexCount = {};
+    unsigned int vertexCount = 0;    
+    Vertex* vertices = {0};
+
+    unsigned int indexCount = 0;
     unsigned short* indices = {0};
 
     RenderData renderData = {};

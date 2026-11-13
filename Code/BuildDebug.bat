@@ -35,9 +35,10 @@ set fxc="C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe"
 set ShaderDir=C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Data\
 
 %fxc% /Fo "%ShaderDir%BaseVertexShader.cso" /T vs_5_0 "%ShaderDir%BaseVertexShader.hlsl"
-%fxc% /Fo "%ShaderDir%BaseTextureVertexShader.cso" /T vs_5_0 "%ShaderDir%BaseTextureVertexShader.hlsl"
 %fxc% /Fo "%ShaderDir%BasePixelShader.cso" /T ps_5_0 "%ShaderDir%BasePixelShader.hlsl"
+%fxc% /Fo "%ShaderDir%LightingPixelShader.cso" /T ps_5_0 "%ShaderDir%LightingPixelShader.hlsl"
 %fxc% /Fo "%ShaderDir%BaseTexturePixelShader.cso" /T ps_5_0 "%ShaderDir%BaseTexturePixelShader.hlsl"
+%fxc% /Fo "%ShaderDir%LightingTexturePixelShader.cso" /T ps_5_0 "%ShaderDir%LightingTexturePixelShader.hlsl"
 
 cl %CommonCompilerFlags% "C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Code\Win32Main.cpp" -FmDonkeyKong3D.map -link -subsystem:windows -out:"Donkey Kong 3D.exe" %CommonLinkerFlags%
 REM "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\cl.exe" %CommonCompilerFlags% "C:\Users\Colto\OneDrive\Desktop\Donkey Kong 3D\Code\Win32Main.cpp" -FmDonkeyKong3D.map -link -subsystem:windows -out:"Donkey Kong 3D.exe" %CommonLinkerFlags%
