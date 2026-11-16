@@ -14,7 +14,6 @@
 
 #include "Types.h"
 #include "Direct3DRenderer.h"
-#include "WavefrontObjParser.h"
 
 #define WM_APP_SIZE (WM_APP + 1)
 #define WM_APP_ACTIVATEAPP (WM_APP + 2)
@@ -127,19 +126,6 @@ struct GameInput
 	GameMouseInput mouse = {};
 	GameKeyboardInput keyboard = {};
 	GameControllerInput controllers[4] = {};
-};
-
-struct Sprite
-{
-    RenderData renderData = {};
-    Texture2D texture = {};
-    Transform transform = {};
-};
-
-struct Cube
-{
-    RenderData renderData = {};
-    Texture2D texture = {};
 };
 
 struct GameState

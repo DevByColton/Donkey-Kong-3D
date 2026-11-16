@@ -1,6 +1,10 @@
 #include "Win32Main.h"
 #include "Direct3DRenderer.cpp"
 
+#include "Sprite.h"
+#include "Mesh.h"
+#include "Light.h"
+
 internal_link void
 Win32ProcessButtonMessage(GameButton* newState, bool isDown)
 {
@@ -648,48 +652,34 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			Shaders shaders = {};
 			LoadAllShaders(d3dResource.device, &shaders);
 
-			Mesh lightMesh = {};
-			CreateMeshFromWavefrontFile(d3dResource.device, &shaders, &lightMesh, "LightSource.obj");
-			lightMesh.renderData.vertexShader = shaders.baseVertexShader.shader;
-			lightMesh.renderData.inputLayout = shaders.baseVertexShader.inputLayout;
-			lightMesh.renderData.pixelShader = shaders.basePixelShader;
-			Transform lightMeshTransform = {DirectX::XMFLOAT3(0.f, 3.25f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
-			
-			LightSource lightSource = {};
-			lightSource.data.ambientStrength = DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.f);
-			lightSource.data.lightColor = DirectX::XMFLOAT4(1.f, 1.f, 1.f, 1.f);
-			lightSource.data.lightPosition = DirectX::XMFLOAT4(lightMeshTransform.position.x, lightMeshTransform.position.y, lightMeshTransform.position.z, 1.f);
-			CreateConstantBuffer(d3dResource.device, &lightSource.buffer, sizeof(LightData));
+			Meshs meshs = LoadAllMeshs(d3dResource.device, &shaders);
 
-			Mesh suzanneMesh = {};
-			CreateMeshFromWavefrontFile(d3dResource.device, &shaders, &suzanneMesh, "Suzanne.obj");
-			suzanneMesh.renderData.vertexShader = shaders.baseVertexShader.shader;
-			suzanneMesh.renderData.inputLayout = shaders.baseVertexShader.inputLayout;
-			suzanneMesh.renderData.pixelShader = shaders.lightingPixelShader;
-			Transform suzanneTransforms[] = 
+			Sprite sprite = CreateSprite(d3dResource.device, &shaders);
+			ScaleUniform(&sprite.transform, 0.5f);
+
+			Light light = CreateLight(d3dResource.device, &shaders);
+			light.mesh = &meshs.light;
+
+			Mesh suzannes[6] = 
 			{
-				{DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				// {DirectX::XMFLOAT3(-3.f, -2.5f, -4.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				// {DirectX::XMFLOAT3(4.f, 4.f, -6.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				// {DirectX::XMFLOAT3(-5.f, 7.f, -10.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				// {DirectX::XMFLOAT3(-8.3f, 8.f, -6.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
-				// {DirectX::XMFLOAT3(1.f, 0.f, -7.6f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
+				{&meshs.suzanne, {DirectX::XMFLOAT3(2.f, 2.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.7f, 1.f, 1.f)}},
+				{&meshs.suzanne, {DirectX::XMFLOAT3(-3.f, -2.5f, -4.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 0.2f, 1.f)}},
+				{&meshs.suzanne, {DirectX::XMFLOAT3(4.f, 4.f, -6.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.suzanne, {DirectX::XMFLOAT3(-5.f, 7.f, -10.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.suzanne, {DirectX::XMFLOAT3(-8.3f, 8.f, -6.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.suzanne, {DirectX::XMFLOAT3(1.f, 0.f, -7.6f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
 			};
 
-			Mesh crateMesh = {};
-			CreateMeshFromWavefrontFile(d3dResource.device, &shaders, &crateMesh, "Crate.obj");
-			crateMesh.renderData.vertexShader = shaders.baseVertexShader.shader;
-			crateMesh.renderData.inputLayout = shaders.baseVertexShader.inputLayout;
-			crateMesh.renderData.pixelShader = shaders.lightingPixelShader;
-			Transform crateTransform = {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
+			// TexturedMesh crate = CreateTexturedMeshFromFile(d3dResource.device, "Crate.obj");
+			// crate.transform = {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
 
-			Cube cube = {};
-			CreateTexturedCube(d3dResource.device, &shaders, &cube, 1.f);
-			Transform cubeTransform = {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
+			Mesh crate = {};
+			crate.data = &meshs.crate;
+			crate.transform = {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
 
-			Sprite sprite = {};
-			CreateSprite(d3dResource.device, &shaders, &sprite);
-			ScaleUniform(&sprite.transform, 0.5f);
+			Mesh crate2 = {};
+			crate2.data = &meshs.crate;
+			crate2.transform = {DirectX::XMFLOAT3(-3.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
 
 			Camera camera = {};
 			camera.yaw = -90.f;
@@ -788,37 +778,16 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				//
 				D3DClearRenderTarget(&d3dResource, backBufferColor);
 
-				// NOTE: Move light and save move light to world space
-				//lightMeshTransform.position.z = 5.f*DirectX::XMScalarSin(DirectX::XMConvertToRadians(100.f*gameState.totalTime));
-				lightSource.data.lightPosition = DirectX::XMFLOAT4(lightMeshTransform.position.x, lightMeshTransform.position.y, lightMeshTransform.position.z, 1.f);
-				ApplyScaleRotationTranslation(&lightMeshTransform, &lightMesh.renderData.modelViewProjectionData);
-				ApplyView(&lightMesh.renderData.modelViewProjectionData, &camera);
+				UpdateRenderLight(&light, &camera, &d3dResource, &gameState);
 
-				// for (int transformIndex = 0; transformIndex < ARRAYSIZE(suzanneTransforms); ++transformIndex)
-				// {
-				// 	Transform* suzanneTransform = suzanneTransforms + transformIndex;
-				// 	ApplyScaleRotationTranslation(suzanneTransform, &suzanneMesh.renderData.modelViewProjectionData);
-				// 	ApplyView(&suzanneMesh.renderData.modelViewProjectionData, &camera);
-				// 	PerVertexUpdates(&suzanneMesh);
-				// 	PerspectiveProjection(&suzanneMesh.renderData.modelViewProjectionData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
-				// 	D3DRender(d3dResource.context, &suzanneMesh.renderData, 0, &lightSource);
-				// }
-#if 1
-				ApplyScaleRotationTranslation(&crateTransform, &crateMesh.renderData.modelViewProjectionData);
-				ApplyView(&crateMesh.renderData.modelViewProjectionData, &camera);
-				PerVertexUpdates(&crateMesh);
-				PerspectiveProjection(&crateMesh.renderData.modelViewProjectionData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
-				D3DRender(d3dResource.context, &crateMesh.renderData, 0, &lightSource);
-#else
-				ApplyScaleRotationTranslation(&cubeTransform, &cube.renderData.modelViewProjectionData);
-				ApplyView(&cube.renderData.modelViewProjectionData, &camera);
-				PerspectiveProjection(&cube.renderData.modelViewProjectionData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
-				D3DRender(d3dResource.context, &cube.renderData, &cube.texture, &lightSource);
-#endif
-				ApplyScaleRotationTranslation(&lightMeshTransform, &lightMesh.renderData.modelViewProjectionData);
-				ApplyView(&lightMesh.renderData.modelViewProjectionData, &camera);
-				PerspectiveProjection(&lightMesh.renderData.modelViewProjectionData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
-				D3DRender(d3dResource.context, &lightMesh.renderData);
+				for (unsigned int suzanneIndex = 0; suzanneIndex < ARRAYSIZE(suzannes); ++suzanneIndex)
+				{
+					Mesh* suzanne = suzannes + suzanneIndex;
+					UpdateRenderMesh(suzanne, &camera, &d3dResource);
+				}
+
+				UpdateRenderMesh(&crate, &camera, &d3dResource);
+				UpdateRenderMesh(&crate2, &camera, &d3dResource);
 
 				float padding = 20.f;
 				sprite.transform.position = DirectX::XMFLOAT3(
@@ -826,10 +795,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				    (d3dResource.backBufferDescription.Height / 2.f - (sprite.transform.scale.y * sprite.texture.height) / 2.f) - padding,
 				    0.f
 				);
-				ApplyScaleRotationTranslation(&sprite.transform, &sprite.renderData.modelViewProjectionData);
-				ApplyView(&sprite.renderData.modelViewProjectionData);
- 				OrthographicProjection(&sprite.renderData.modelViewProjectionData, d3dResource.backBufferDescription.Width, d3dResource.backBufferDescription.Height);
-				D3DRender(d3dResource.context, &sprite.renderData, &sprite.texture);
+				UpdateRenderSprite(&sprite, &d3dResource);
 
 				//
 				// NOTE: Note present the buffer

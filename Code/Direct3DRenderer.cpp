@@ -268,7 +268,7 @@ D3DClearRenderTarget(D3DResource* d3dResource, Vector4 color)
 }
 
 internal_link void
-D3DRender(ID3D11DeviceContext* context, RenderData* renderData, Texture2D* texture = 0, LightSource* lightSource = 0)
+D3DRender(ID3D11DeviceContext* context, RenderData* renderData, Texture2D* texture = 0)
 {
 	//
 	// NOTE: Input-Assembler (IA) stage
@@ -292,11 +292,6 @@ D3DRender(ID3D11DeviceContext* context, RenderData* renderData, Texture2D* textu
     // NOTE: Pixel shader stage
     //
     context->PSSetShader(renderData->pixelShader, 0, 0);
-    if (lightSource)
-    {
-    	context->UpdateSubresource(lightSource->buffer, 0, 0, &lightSource->data, 0, 0);
-    	context->PSSetConstantBuffers(0, 1, &lightSource->buffer);
-    }
     if (texture)
     {
     	context->PSSetShaderResources(0, 1, &texture->view);
@@ -439,8 +434,7 @@ LoadAllShaders(ID3D11Device* device, Shaders* shaders)
 	    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	    { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	    { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	    { "WORLDPOS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	    { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 	CreateVertexShaderFromFile(
 		device, 
@@ -456,37 +450,40 @@ LoadAllShaders(ID3D11Device* device, Shaders* shaders)
 	CreatePixelShaderFromFile(device, &shaders->lightingTexturePixelShader, "LightingTexturePixelShader.cso");
 }
 
-internal_link void
-GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1FileName, const char* texture2FileName)
+internal_link Texture2D
+GenerateTexture(ID3D11Device* device, int flipVertically, const char* texture1FileName, const char* texture2FileName = 0)
 {
-	// NOTE: Load 4 channels RGBA becuase we are using DXGI_FORMAT_R8G8B8A8_UNORM
-	unsigned char* stbTexture1Data = stbi_load(texture1FileName, &texture->width, &texture->height, &texture->numberOfColorChannels, 4);
-	if (!stbTexture1Data)
-	{
-		OutputDebugStringA("Unable to load image: ");
-		OutputDebugStringA(texture1FileName);
-		OutputDebugStringA("\n");
-		return;
-	}
+	assert(texture1FileName);
 
-	// TODO: This call to load is going to overwirte texture width and height, which is fine because I am using a texture 2D array
-	// so the width and hieght of these need to be the same anyway. Just might want to add validation of some sort
-	unsigned char* stbTexture2Data = stbi_load(texture2FileName, &texture->width, &texture->height, &texture->numberOfColorChannels, 4);
-	if (!stbTexture2Data)
+	Texture2D texture = {};
+
+	unsigned int textureArraySize = 0;
+	unsigned char* stbTexture1Data = {0};
+	unsigned char* stbTexture2Data = {0};
+
+	stbi_set_flip_vertically_on_load(flipVertically);
+
+	// NOTE: Load 4 channels RGBA becuase we are using DXGI_FORMAT_R8G8B8A8_UNORM
+	stbTexture1Data = stbi_load(texture1FileName, &texture.width, &texture.height, &texture.numberOfColorChannels, 4);
+	assert(stbTexture1Data);
+	++textureArraySize;
+
+	if (texture2FileName)
 	{
-		OutputDebugStringA("Unable to load image: ");
-		OutputDebugStringA(texture2FileName);
-		OutputDebugStringA("\n");
-		return;
+		// TODO: This call to load is going to overwirte texture width and height, which is fine because I am using a texture 2D array
+		// so the width and hieght of these need to be the same anyway. Just might want to add validation of some sort
+		stbTexture2Data = stbi_load(texture2FileName, &texture.width, &texture.height, &texture.numberOfColorChannels, 4);
+		assert(stbTexture2Data);
+		++textureArraySize;
 	}
 
 	//
 	// NOTE: Create the texture 2D
 	//
 	D3D11_TEXTURE2D_DESC textureDescription = {};
-	textureDescription.Width = texture->width;
-	textureDescription.Height = texture->height;
-	textureDescription.ArraySize = 2;
+	textureDescription.Width = texture.width;
+	textureDescription.Height = texture.height;
+	textureDescription.ArraySize = textureArraySize;
 	textureDescription.MipLevels = 1;
 	textureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	textureDescription.SampleDesc.Count = 1;
@@ -496,19 +493,37 @@ GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1Fi
 	textureDescription.CPUAccessFlags = 0;
 	textureDescription.MiscFlags = 0;
 
-	int rowPitch = texture->width * 4;
+	unsigned int rowPitch = texture.width * 4;
 
-	D3D11_SUBRESOURCE_DATA textureData[2];
-	ZeroMemory(&textureData, sizeof(D3D11_SUBRESOURCE_DATA));
-	textureData[0].pSysMem = stbTexture1Data;
-	textureData[0].SysMemPitch = rowPitch;
-	textureData[0].SysMemSlicePitch = 0;
-	textureData[1].pSysMem = stbTexture2Data;
-	textureData[1].SysMemPitch = rowPitch;
-	textureData[1].SysMemSlicePitch = 0;
+	switch (textureArraySize)
+	{
+		case 1: 
+		{
+			D3D11_SUBRESOURCE_DATA textureData[1];
+			ZeroMemory(&textureData, sizeof(D3D11_SUBRESOURCE_DATA));
+			textureData[0].pSysMem = stbTexture1Data;
+			textureData[0].SysMemPitch = rowPitch;
+			textureData[0].SysMemSlicePitch = 0;
 
-	HRESULT result = device->CreateTexture2D(&textureDescription, textureData, &texture->source);
-	ASSERT_OK(result, "Unable to create texture 2D");
+			HRESULT result = device->CreateTexture2D(&textureDescription, textureData, &texture.source);
+			ASSERT_OK(result, "Unable to create texture");
+		} break;
+
+		case 2:
+		{
+			D3D11_SUBRESOURCE_DATA textureData[2];
+			ZeroMemory(&textureData, sizeof(D3D11_SUBRESOURCE_DATA));
+			textureData[0].pSysMem = stbTexture1Data;
+			textureData[0].SysMemPitch = rowPitch;
+			textureData[0].SysMemSlicePitch = 0;
+			textureData[1].pSysMem = stbTexture2Data;
+			textureData[1].SysMemPitch = rowPitch;
+			textureData[1].SysMemSlicePitch = 0;
+
+			HRESULT result = device->CreateTexture2D(&textureDescription, textureData, &texture.source);
+			ASSERT_OK(result, "Unable to create texture");
+		} break;
+	}
 
 	//
 	// NOTE: Creat the shader resource
@@ -521,7 +536,7 @@ GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1Fi
 	resourceDescription.Texture2DArray.FirstArraySlice = 0;
 	resourceDescription.Texture2DArray.ArraySize = textureDescription.ArraySize;
 
-	result = device->CreateShaderResourceView(texture->source, &resourceDescription, &texture->view);
+	HRESULT result = device->CreateShaderResourceView(texture.source, &resourceDescription, &texture.view);
 	ASSERT_OK(result, "Unable to create shader resource");
 
 	//
@@ -536,7 +551,7 @@ GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1Fi
 	samplerDescription.MinLOD = 0.f;
 	samplerDescription.MaxLOD = D3D11_FLOAT32_MAX;
 
-	result = device->CreateSamplerState(&samplerDescription, &texture->sampler);
+	result = device->CreateSamplerState(&samplerDescription, &texture.sampler);
 	ASSERT_OK(result, "Unable to create shader sample state");
 
 	//
@@ -552,11 +567,13 @@ GenerateTexture(ID3D11Device* device, Texture2D* texture, const char* texture1Fi
 	blendDescription.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 	blendDescription.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-	result = device->CreateBlendState(&blendDescription, &texture->blend);
+	result = device->CreateBlendState(&blendDescription, &texture.blend);
 	ASSERT_OK(result, "Unable to create blend description");
 
 	stbi_image_free(stbTexture1Data);
 	stbi_image_free(stbTexture2Data);
+
+	return texture;
 }
 
 internal_link void
@@ -619,201 +636,10 @@ ApplyView(ModelViewProjectionData* modelViewProjectionData, Camera* camera = 0)
 	DirectX::XMStoreFloat4x4(&modelViewProjectionData->view, DirectX::XMMatrixTranspose(view));	
 }
 
-internal_link void
-PerVertexUpdates(Mesh* mesh)
-{
-	DirectX::FXMMATRIX model = DirectX::XMLoadFloat4x4(&mesh->renderData.modelViewProjectionData.model);
-	DirectX::XMMATRIX inverseModel = DirectX::XMMatrixInverse(0, model);
-	DirectX::XMMATRIX normalModel = DirectX::XMMatrixTranspose(inverseModel);
-
-	for (unsigned int vertexIndex = 0; vertexIndex < mesh->vertexCount; ++vertexIndex)
-	{
-		Vertex* vertex = mesh->vertices + vertexIndex;
-
-		DirectX::XMVECTOR position = DirectX::XMLoadFloat3(&vertex->position);
-		DirectX::XMVECTOR worldPosition = DirectX::XMVector3TransformCoord(position, model);
-		DirectX::XMStoreFloat3(&vertex->worldPosition, worldPosition);
-
-		DirectX::XMVECTOR normal = DirectX::XMLoadFloat3(&vertex->normal);
-		normal = DirectX::XMVector3Normalize(DirectX::XMVector3TransformNormal(normal, normalModel));
-		DirectX::XMStoreFloat3(&vertex->normal, normal);
-	}
-}
-
 inline void
 ScaleUniform(Transform* transform, float scale)
 {
 	transform->scale.x = scale;
 	transform->scale.y = scale;
 	transform->scale.z = scale;
-}
-
-internal_link void
-CreateSprite(ID3D11Device* device, Shaders* shaders, Sprite* sprite)
-{	
-	GenerateTexture(device, &sprite->texture, "WoodContainer.jpg", "AwesomeFace.png");
-
-	// TODO: Probably need a better way to check validity?
-	if (sprite->texture.source)
-	{
-		sprite->transform.position = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
-		sprite->transform.scale = DirectX::XMFLOAT3(1.f, 1.f, 1.f);
-		sprite->transform.rotation = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
-
-		float width = (float)sprite->texture.width;
-		float height = (float)sprite->texture.height;
-		float halfWidth = 0.5f*width;
-		float halfHeight = 0.5f*height;
-
-		Vertex verticies[] =
-		{
-			{DirectX::XMFLOAT3(halfWidth, halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
-			{DirectX::XMFLOAT3(halfWidth, -halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
-			{DirectX::XMFLOAT3(-halfWidth, -halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f)},
-			{DirectX::XMFLOAT3(-halfWidth, halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f)},
-		};
-
-		unsigned short indices[] = 
-		{
-			0,1,2,
-			0,2,3,
-		};
-
-		CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &sprite->renderData);
-		CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &sprite->renderData);
-		CreateConstantBuffer(device, &sprite->renderData.modelViewProjectionBuffer, sizeof(ModelViewProjectionData));
-
-		sprite->renderData.vertexShader = shaders->baseVertexShader.shader;
-		sprite->renderData.inputLayout = shaders->baseVertexShader.inputLayout;
-		sprite->renderData.pixelShader = shaders->baseTexturePixelShader;
-	}
-}
-
-internal_link void
-CreateMeshFromWavefrontFile(ID3D11Device* device, Shaders* shaders, Mesh* mesh, const char* objFileName)
-{
-	ParseMeshFromWavefrontFile(mesh, objFileName);
-	CreateVertexBuffer(device, mesh->vertices, mesh->vertexCount, &mesh->renderData);
-	CreateIndexBuffer(device,  mesh->indices, mesh->indexCount, &mesh->renderData);
-	CreateConstantBuffer(device, &mesh->renderData.modelViewProjectionBuffer, sizeof(ModelViewProjectionData));
-}
-
-internal_link void
-CreateTexturedCube(ID3D11Device* device, Shaders* shaders, Cube* cube, float size)
-{
-#if 0	
-	Vertex verticies[] =
-	{
-		// -X face
-		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(-1.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(-1.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(-1.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(-1.f, 0.f, 0.f)},
-
-		// +X face
-		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},
-		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},
-
-		// -Y face
-		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(0.f, -1.f, 0.f)},
-		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(0.f, -1.f, 0.f)},
-		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(0.f, -1.f, 0.f)},
-		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.f, -1.f, 0.f)},
-
-		// +Y face
-		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},
-		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},
-		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},
-		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},
-
-		// -Z face
-		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(0.f, 0.f, -1.f)},
-		{DirectX::XMFLOAT3(size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(0.f, 0.f, -1.f)},
-		{DirectX::XMFLOAT3(-size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, -1.f)},
-		{DirectX::XMFLOAT3(size, size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, -1.f)},
-
-		// +Z face
-		{DirectX::XMFLOAT3(size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},
-		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},
-		{DirectX::XMFLOAT3(size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},
-		{DirectX::XMFLOAT3(-size, size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f)},
-	};
-
-	unsigned short indices[] =
-	{
-		0,1,2, 2,1,3,       // -X
-		4,5,6, 6,5,7,       // +X
-		8,9,10, 10,9,11,    // -Y
-		12,13,14, 14,13,15, // +Y
-		16,17,18, 18,17,19, // -Z
-		21,20,22, 22,21,23, // +Z
-	};
-#else
-	Vertex verticies[] =
-	{
-		// -Z face
-		{DirectX::XMFLOAT3(-0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(0.0f, 0.0f, -1.0f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(0.0f, 0.0f, -1.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(0.0f, 0.0f, -1.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 0.0f, -1.0f)},
-		{DirectX::XMFLOAT3(-0.5f,  0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 0.0f, -1.0f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 0.0f, -1.0f)},
-
-		// +Z face
-		{DirectX::XMFLOAT3(-0.5f, -0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f)},
-		{DirectX::XMFLOAT3(-0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f)},
-
-		// -X face
-		{DirectX::XMFLOAT3(-0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(-1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f,  0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(-1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(-1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(-1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(-1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(-1.0f, 0.0f, 0.0f)},
-
-		// +X face
-		{DirectX::XMFLOAT3(0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)},
-
-		// -Y face
-		{DirectX::XMFLOAT3(-0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f, -0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f, -0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f)},
-
-		// +Y face
-		{DirectX::XMFLOAT3(-0.5f,  0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 1.f), DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f), DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(0.f, 0.f), DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f,  0.5f,  0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f)},
-		{DirectX::XMFLOAT3(-0.5f,  0.5f, -0.5f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f), DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f)},
-	};
-
-	unsigned short indices[] =
-	{
-		0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35
-	};
-#endif	
-
-	CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &cube->renderData);
-	CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &cube->renderData);
-	CreateConstantBuffer(device, &cube->renderData.modelViewProjectionBuffer, sizeof(ModelViewProjectionData));
-	GenerateTexture(device, &cube->texture, "WoodContainer.jpg", "AwesomeFace.png");
-
-	cube->renderData.vertexShader = shaders->baseVertexShader.shader;
-	cube->renderData.inputLayout = shaders->baseVertexShader.inputLayout;
-	cube->renderData.pixelShader = shaders->lightingPixelShader;
 }

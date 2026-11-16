@@ -1,20 +1,6 @@
 #ifndef DIRECTX_H
 #define DIRECTX_H
 
-struct LightData
-{
-    DirectX::XMFLOAT4 ambientStrength = {};
-    DirectX::XMFLOAT4 lightColor = {};
-    DirectX::XMFLOAT4 lightPosition = {};
-};
-static_assert((sizeof(LightData) % 16) == 0, "LightData size must be 16-byte aligned");
-
-struct LightSource
-{
-    ID3D11Buffer* buffer = {0};
-    LightData data = {};
-};
-
 struct ModelViewProjectionData
 {
     DirectX::XMFLOAT4X4 model = {};
@@ -107,30 +93,12 @@ struct Vertex
     DirectX::XMFLOAT3 color = {};
     DirectX::XMFLOAT2 texCoord = {};
     DirectX::XMFLOAT3 normal = {};
-    DirectX::XMFLOAT3 worldPosition = {};
 };
 
 struct VertexColor
 {
     DirectX::XMFLOAT3 position = {};
     DirectX::XMFLOAT3 color = {};
-};
-
-struct Mesh
-{
-    unsigned int vertexCount = 0;    
-    Vertex* vertices = {0};
-
-    unsigned int indexCount = 0;
-    unsigned short* indices = {0};
-
-    RenderData renderData = {};
-
-    ~Mesh() 
-    { 
-        free(vertices);
-        free(indices);
-    }
 };
 
 #endif // DIRECTX_H
