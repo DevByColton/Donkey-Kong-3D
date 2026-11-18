@@ -681,6 +681,10 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			crate2.data = &meshs.crate;
 			crate2.transform = {DirectX::XMFLOAT3(-3.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
 
+			Mesh torus = {};
+			torus.data = &meshs.torus;
+			torus.transform = {DirectX::XMFLOAT3(-3.f, 3.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
+
 			Camera camera = {};
 			camera.yaw = -90.f;
 			camera.pitch = 0.f;
@@ -788,6 +792,11 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 
 				UpdateRenderMesh(&crate, &camera, &d3dResource);
 				UpdateRenderMesh(&crate2, &camera, &d3dResource);
+				
+				torus.transform.rotation.x = 200.f*gameState.totalTime;
+				torus.transform.rotation.y = 100.f*gameState.totalTime;
+				ScaleUniform(&torus.transform, 0.2f + (0.5f * DirectX::XMScalarSin(DirectX::XMConvertToRadians(50.f*gameState.totalTime)) + 0.5f));
+				UpdateRenderMesh(&torus, &camera, &d3dResource);
 
 				float padding = 20.f;
 				sprite.transform.position = DirectX::XMFLOAT3(

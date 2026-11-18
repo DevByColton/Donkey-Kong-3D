@@ -3,6 +3,7 @@ cbuffer ModelViewProjectionData : register(b0)
     matrix model;
     matrix view;
     matrix projection;
+    matrix normalModel;
 };
 
 struct VertexShaderInput
@@ -33,7 +34,7 @@ VertexShaderOutput main(VertexShaderInput input)
     output.position = position;
     output.color = float4(input.color, 1.f);
     output.texCoord = input.texCoord;
-    output.normal = input.normal;
+    output.normal = normalize(mul(input.normal, (float3x3)normalModel));
     output.worldPosition = mul(float4(input.position, 1.f), model).xyz;
 
     return output;

@@ -19,6 +19,7 @@ struct MeshData
 struct Meshs
 {
 	MeshData suzanne = {};
+	MeshData torus = {};
 	MeshData crate = {};
 	MeshData light = {};
 };
@@ -348,6 +349,11 @@ LoadAllMeshs(ID3D11Device* device, Shaders* shaders)
 	meshs.suzanne.renderData.vertexShader = shaders->baseVertexShader.shader;
 	meshs.suzanne.renderData.inputLayout = shaders->baseVertexShader.inputLayout;
 	meshs.suzanne.renderData.pixelShader = shaders->lightingPixelShader;
+
+	meshs.torus = CreateMeshFromWavefrontFile(device, "Torus.obj");
+	meshs.torus.renderData.vertexShader = shaders->baseVertexShader.shader;
+	meshs.torus.renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+	meshs.torus.renderData.pixelShader = shaders->lightingPixelShader;
 	
 	meshs.crate = CreateMeshFromWavefrontFile(device, "Crate.obj");
 	meshs.crate.renderData.vertexShader = shaders->baseVertexShader.shader;
@@ -368,15 +374,7 @@ UpdateVertexShaderData(MeshData* mesh)
 	DirectX::FXMMATRIX model = DirectX::XMLoadFloat4x4(&mesh->renderData.modelViewProjectionData.model);
 	DirectX::XMMATRIX inverseModel = DirectX::XMMatrixInverse(0, model);
 	DirectX::XMMATRIX normalModel = DirectX::XMMatrixTranspose(inverseModel);
-
-	for (unsigned int vertexIndex = 0; vertexIndex < mesh->vertexCount; ++vertexIndex)
-	{
-		Vertex* vertex = mesh->vertices + vertexIndex;
-
-		DirectX::XMVECTOR normal = DirectX::XMLoadFloat3(&vertex->normal);
-		normal = DirectX::XMVector3Normalize(DirectX::XMVector3TransformNormal(normal, normalModel));
-		DirectX::XMStoreFloat3(&vertex->normal, normal);
-	}
+	DirectX::XMStoreFloat4x4(&mesh->renderData.modelViewProjectionData.normalModel, normalModel);
 }
 
 internal_link void

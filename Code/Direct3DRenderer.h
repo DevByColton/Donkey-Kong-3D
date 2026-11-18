@@ -6,6 +6,7 @@ struct ModelViewProjectionData
     DirectX::XMFLOAT4X4 model = {};
     DirectX::XMFLOAT4X4 view = {};
     DirectX::XMFLOAT4X4 projection = {};
+    DirectX::XMFLOAT4X4 normalModel = {};
 };
 static_assert((sizeof(ModelViewProjectionData) % 16) == 0, "ModelViewProjectionData size must be 16-byte aligned");
 
