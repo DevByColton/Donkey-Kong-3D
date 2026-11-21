@@ -94,6 +94,7 @@ struct Vertex
     DirectX::XMFLOAT3 color = {};
     DirectX::XMFLOAT2 texCoord = {};
     DirectX::XMFLOAT3 normal = {};
+    float roughness = {};
 };
 
 struct VertexColor

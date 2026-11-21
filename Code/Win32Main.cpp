@@ -657,8 +657,10 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			Sprite sprite = CreateSprite(d3dResource.device, &shaders);
 			ScaleUniform(&sprite.transform, 0.5f);
 
-			Light light = CreateLight(d3dResource.device, &shaders);
-			light.mesh = &meshs.light;
+			Light light = CreateCubeLight(d3dResource.device, 0.25f);
+			light.renderData.vertexShader = shaders.baseVertexShader.shader;
+			light.renderData.inputLayout = shaders.baseVertexShader.inputLayout;
+			light.renderData.pixelShader = shaders.basePixelShader;
 
 			Mesh suzannes[6] = 
 			{
@@ -669,9 +671,6 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				{&meshs.suzanne, {DirectX::XMFLOAT3(-8.3f, 8.f, -6.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
 				{&meshs.suzanne, {DirectX::XMFLOAT3(1.f, 0.f, -7.6f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
 			};
-
-			// TexturedMesh crate = CreateTexturedMeshFromFile(d3dResource.device, "Crate.obj");
-			// crate.transform = {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
 
 			Mesh crate = {};
 			crate.data = &meshs.crate;
@@ -793,9 +792,8 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				UpdateRenderMesh(&crate, &camera, &d3dResource);
 				UpdateRenderMesh(&crate2, &camera, &d3dResource);
 				
-				torus.transform.rotation.x = 200.f*gameState.totalTime;
-				torus.transform.rotation.y = 100.f*gameState.totalTime;
-				ScaleUniform(&torus.transform, 0.2f + (0.5f * DirectX::XMScalarSin(DirectX::XMConvertToRadians(50.f*gameState.totalTime)) + 0.5f));
+				torus.transform.rotation.x = 20.f*gameState.totalTime;
+				torus.transform.rotation.y = 10.f*gameState.totalTime;
 				UpdateRenderMesh(&torus, &camera, &d3dResource);
 
 				float padding = 20.f;

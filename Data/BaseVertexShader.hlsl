@@ -12,6 +12,7 @@ struct VertexShaderInput
     float3 color : COLOR;
     float2 texCoord : TEXCOORD;
     float3 normal : NORMAL;
+    float roughness : ROUGHNESS;
 };
 
 struct VertexShaderOutput
@@ -21,6 +22,7 @@ struct VertexShaderOutput
     float2 texCoord : TEXCOORD;
     float3 normal : NORMAL;
     float3 worldPosition : WORLDPOS;
+    float roughness : ROUGHNESS;
 };
 
 VertexShaderOutput main(VertexShaderInput input)
@@ -36,6 +38,7 @@ VertexShaderOutput main(VertexShaderInput input)
     output.texCoord = input.texCoord;
     output.normal = normalize(mul(input.normal, (float3x3)normalModel));
     output.worldPosition = mul(float4(input.position, 1.f), model).xyz;
+    output.roughness = input.roughness;
 
     return output;
 }
