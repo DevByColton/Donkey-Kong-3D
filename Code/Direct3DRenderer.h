@@ -12,7 +12,9 @@ static_assert((sizeof(ModelViewProjectionData) % 16) == 0, "ModelViewProjectionD
 
 struct RenderData
 {
-    int indexCount = {};
+    unsigned int stride = {};
+    unsigned int offset = {};
+    unsigned int indexCount = {};
     ID3D11Buffer* vertexBuffer = {0};
     ID3D11Buffer* indexBuffer = {0};
     ID3D11Buffer* modelViewProjectionBuffer = {0};
@@ -52,12 +54,12 @@ struct VertexShader
 struct Shaders
 {
     VertexShader baseVertexShader = {};
-    VertexShader baseTextureVertexShader = {};
+    VertexShader textureVertexShader = {};
+    VertexShader lightingVertexShader = {};
 
     ID3D11PixelShader* basePixelShader = {0};
     ID3D11PixelShader* lightingPixelShader = {0};
     ID3D11PixelShader* baseTexturePixelShader = {0};
-    ID3D11PixelShader* lightingTexturePixelShader = {0};
 };
 
 struct Texture2D
@@ -86,6 +88,19 @@ struct Camera
     DirectX::XMFLOAT3 position = {};
     DirectX::XMFLOAT3 front = {};
     DirectX::XMFLOAT3 up = {};
+};
+
+struct BaseVertex
+{
+    DirectX::XMFLOAT3 position = {};
+    DirectX::XMFLOAT3 color = {};
+};
+
+struct SpriteVertex
+{
+    DirectX::XMFLOAT3 position = {};
+    DirectX::XMFLOAT3 color = {};
+    DirectX::XMFLOAT2 texCoord = {};
 };
 
 struct Vertex

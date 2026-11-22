@@ -273,10 +273,7 @@ D3DRender(ID3D11DeviceContext* context, RenderData* renderData, Texture2D* textu
 	//
 	// NOTE: Input-Assembler (IA) stage
 	//
-	UINT stride = sizeof(Vertex);
-    UINT offset = 0;
-
-    context->IASetVertexBuffers(0, 1, &renderData->vertexBuffer, &stride, &offset);
+    context->IASetVertexBuffers(0, 1, &renderData->vertexBuffer, &renderData->stride, &renderData->offset);
     context->IASetIndexBuffer(renderData->indexBuffer, DXGI_FORMAT_R16_UINT, 0);
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     context->IASetInputLayout(renderData->inputLayout);
@@ -330,9 +327,9 @@ D3DReleaseAllResources(D3DResource* d3dResource)
 }
 
 inline void
-CreateVertexBuffer(ID3D11Device* device, Vertex verticies[], unsigned int vertexCount, RenderData* renderData)
+CreateVertexBuffer(ID3D11Device* device, void* verticies, unsigned int vertexSize, unsigned int vertexCount, RenderData* renderData)
 {
-	CD3D11_BUFFER_DESC vertexBufferDescription(sizeof(Vertex) * vertexCount, D3D11_BIND_VERTEX_BUFFER);
+	CD3D11_BUFFER_DESC vertexBufferDescription(vertexSize * vertexCount, D3D11_BIND_VERTEX_BUFFER);
 	
 	D3D11_SUBRESOURCE_DATA vertexData;
 	ZeroMemory(&vertexData, sizeof(D3D11_SUBRESOURCE_DATA));
@@ -432,10 +429,7 @@ LoadAllShaders(ID3D11Device* device, Shaders* shaders)
 	D3D11_INPUT_ELEMENT_DESC baseVertexShaderIADesc[] =
 	{
 	    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	    { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	    { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	    { "ROUGHNESS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 	CreateVertexShaderFromFile(
 		device, 
@@ -445,10 +439,39 @@ LoadAllShaders(ID3D11Device* device, Shaders* shaders)
 		ARRAYSIZE(baseVertexShaderIADesc)
 	);
 
+	D3D11_INPUT_ELEMENT_DESC textureVertexShaderIADesc[] =
+	{
+	    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+	CreateVertexShaderFromFile(
+		device, 
+		&shaders->textureVertexShader,
+		"TextureVertexShader.cso",
+		textureVertexShaderIADesc, 
+		ARRAYSIZE(textureVertexShaderIADesc)
+	);
+
+	D3D11_INPUT_ELEMENT_DESC lightingVertexShaderIADesc[] =
+	{
+	    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    { "ROUGHNESS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+	CreateVertexShaderFromFile(
+		device, 
+		&shaders->lightingVertexShader,
+		"LightingVertexShader.cso",
+		lightingVertexShaderIADesc, 
+		ARRAYSIZE(lightingVertexShaderIADesc)
+	);
+
 	CreatePixelShaderFromFile(device, &shaders->basePixelShader, "BasePixelShader.cso");
 	CreatePixelShaderFromFile(device, &shaders->lightingPixelShader, "LightingPixelShader.cso");
 	CreatePixelShaderFromFile(device, &shaders->baseTexturePixelShader, "BaseTexturePixelShader.cso");
-	CreatePixelShaderFromFile(device, &shaders->lightingTexturePixelShader, "LightingTexturePixelShader.cso");
 }
 
 internal_link Texture2D

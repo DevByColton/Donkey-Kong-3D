@@ -332,9 +332,12 @@ CreateMeshFromWavefrontFile(ID3D11Device* device, const char* objFileName)
 	MeshData mesh = {};
 	
 	ParseMeshFromWavefrontFile(device, &mesh, objFileName);
-	CreateVertexBuffer(device, mesh.vertices, mesh.vertexCount, &mesh.renderData);
+	CreateVertexBuffer(device, mesh.vertices, sizeof(Vertex), mesh.vertexCount, &mesh.renderData);
 	CreateIndexBuffer(device,  mesh.indices, mesh.indexCount, &mesh.renderData);
 	CreateConstantBuffer(device, &mesh.renderData.modelViewProjectionBuffer, sizeof(ModelViewProjectionData));
+
+	mesh.renderData.stride = sizeof(Vertex);
+	mesh.renderData.offset = 0;
 
 	return mesh;
 }
@@ -345,18 +348,18 @@ LoadAllMeshs(ID3D11Device* device, Shaders* shaders)
 	Meshs meshs = {};
 
 	meshs.crate = CreateMeshFromWavefrontFile(device, "Crate.obj");
-	meshs.crate.renderData.vertexShader = shaders->baseVertexShader.shader;
-	meshs.crate.renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+	meshs.crate.renderData.vertexShader = shaders->lightingVertexShader.shader;
+	meshs.crate.renderData.inputLayout = shaders->lightingVertexShader.inputLayout;
 	meshs.crate.renderData.pixelShader = shaders->lightingPixelShader;
 
 	meshs.torus = CreateMeshFromWavefrontFile(device, "Torus.obj");
-	meshs.torus.renderData.vertexShader = shaders->baseVertexShader.shader;
-	meshs.torus.renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+	meshs.torus.renderData.vertexShader = shaders->lightingVertexShader.shader;
+	meshs.torus.renderData.inputLayout = shaders->lightingVertexShader.inputLayout;
 	meshs.torus.renderData.pixelShader = shaders->lightingPixelShader;
 
 	meshs.suzanne = CreateMeshFromWavefrontFile(device, "Suzanne.obj");
-	meshs.suzanne.renderData.vertexShader = shaders->baseVertexShader.shader;
-	meshs.suzanne.renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+	meshs.suzanne.renderData.vertexShader = shaders->lightingVertexShader.shader;
+	meshs.suzanne.renderData.inputLayout = shaders->lightingVertexShader.inputLayout;
 	meshs.suzanne.renderData.pixelShader = shaders->lightingPixelShader;
 
 	return meshs;

@@ -657,10 +657,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			Sprite sprite = CreateSprite(d3dResource.device, &shaders);
 			ScaleUniform(&sprite.transform, 0.5f);
 
-			Light light = CreateCubeLight(d3dResource.device, 0.25f);
-			light.renderData.vertexShader = shaders.baseVertexShader.shader;
-			light.renderData.inputLayout = shaders.baseVertexShader.inputLayout;
-			light.renderData.pixelShader = shaders.basePixelShader;
+			Light light = CreateCubeLight(d3dResource.device, &shaders, 0.25f);
 
 			Mesh suzannes[6] = 
 			{

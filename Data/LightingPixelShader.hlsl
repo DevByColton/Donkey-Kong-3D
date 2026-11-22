@@ -27,7 +27,7 @@ float4 main(PixelShaderInput input) : SV_TARGET
     float shininess = 64.f * (1.f - input.roughness);
     float3 viewDirection = normalize(viewPosition.xyz - input.worldPosition);
     float3 reflectDirection = reflect(-lightDirection, normal);
-    float specular = pow(max(dot(viewDirection, reflectDirection), 0.0), shininess);
+    float specular = (diffuse > 0.f) ? pow(max(dot(viewDirection, reflectDirection), 0.0), shininess) : 0.f;
 
     float3 ambientColor = lightAmbient.xyz * lightColor.xyz;
     float3 diffuseColor = diffuse * lightColor.xyz;

@@ -19,7 +19,7 @@ struct Light
 };
 
 internal_link Light
-CreateCubeLight(ID3D11Device* device, float size)
+CreateCubeLight(ID3D11Device* device, Shaders* shaders, float size)
 {
 	Light light = {};
 	
@@ -28,7 +28,7 @@ CreateCubeLight(ID3D11Device* device, float size)
 	light.shaderData.lightColor = DirectX::XMFLOAT4(1.f, 1.f, 1.f, 1.f);
 	light.shaderData.lightPosition = DirectX::XMFLOAT4(light.transform.position.x, light.transform.position.y, light.transform.position.z, 1.f);
 
-	Vertex verticies[] =
+	BaseVertex verticies[] =
 	{
 		{DirectX::XMFLOAT3(-size, -size, -size), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
 		{DirectX::XMFLOAT3(-size, -size, size), DirectX::XMFLOAT3(1.f, 1.f, 1.f)},
@@ -62,10 +62,16 @@ CreateCubeLight(ID3D11Device* device, float size)
 		1,7,5,
 	};
 
-	CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &light.renderData);
+	CreateVertexBuffer(device, verticies, sizeof(BaseVertex), ARRAYSIZE(verticies), &light.renderData);
 	CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &light.renderData);
 	CreateConstantBuffer(device, &light.renderData.modelViewProjectionBuffer, sizeof(ModelViewProjectionData));
 	CreateConstantBuffer(device, &light.buffer, sizeof(LightData));
+
+	light.renderData.stride = sizeof(BaseVertex);
+	light.renderData.offset = 0;
+	light.renderData.vertexShader = shaders->baseVertexShader.shader;
+	light.renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+	light.renderData.pixelShader = shaders->basePixelShader;
 
 	return light;
 }

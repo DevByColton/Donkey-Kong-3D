@@ -8,9 +8,7 @@ struct Sprite
     Transform transform = {};
 };
 
-//
 // TODO: Make this generic sprite creation
-//
 internal_link Sprite
 CreateSprite(ID3D11Device* device, Shaders* shaders)
 {	
@@ -32,7 +30,7 @@ CreateSprite(ID3D11Device* device, Shaders* shaders)
 		float halfWidth = 0.5f*width;
 		float halfHeight = 0.5f*height;
 
-		Vertex verticies[] =
+		SpriteVertex verticies[] =
 		{
 			{DirectX::XMFLOAT3(halfWidth, halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 0.f)},
 			{DirectX::XMFLOAT3(halfWidth, -halfHeight, 1.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f), DirectX::XMFLOAT2(1.f, 1.f)},
@@ -46,12 +44,14 @@ CreateSprite(ID3D11Device* device, Shaders* shaders)
 			0,2,3,
 		};
 
-		CreateVertexBuffer(device, verticies, ARRAYSIZE(verticies), &sprite.renderData);
+		CreateVertexBuffer(device, verticies, sizeof(SpriteVertex), ARRAYSIZE(verticies), &sprite.renderData);
 		CreateIndexBuffer(device, indices, ARRAYSIZE(indices), &sprite.renderData);
 		CreateConstantBuffer(device, &sprite.renderData.modelViewProjectionBuffer, sizeof(ModelViewProjectionData));
 
-		sprite.renderData.vertexShader = shaders->baseVertexShader.shader;
-		sprite.renderData.inputLayout = shaders->baseVertexShader.inputLayout;
+		sprite.renderData.stride = sizeof(SpriteVertex);
+		sprite.renderData.offset = 0;
+		sprite.renderData.vertexShader = shaders->textureVertexShader.shader;
+		sprite.renderData.inputLayout = shaders->textureVertexShader.inputLayout;
 		sprite.renderData.pixelShader = shaders->baseTexturePixelShader;
 	}
 
