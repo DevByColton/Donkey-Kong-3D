@@ -80,16 +80,6 @@ struct Transform
     DirectX::XMFLOAT3 scale = {};
 };
 
-struct Camera
-{
-    float pitch = {};
-    float yaw = {};
-    
-    DirectX::XMFLOAT3 position = {};
-    DirectX::XMFLOAT3 front = {};
-    DirectX::XMFLOAT3 up = {};
-};
-
 struct BaseVertex
 {
     DirectX::XMFLOAT3 position = {};

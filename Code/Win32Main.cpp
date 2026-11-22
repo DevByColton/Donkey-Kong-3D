@@ -1,6 +1,7 @@
 #include "Win32Main.h"
 #include "Direct3DRenderer.cpp"
 
+#include "Camera.h"
 #include "Sprite.h"
 #include "Mesh.h"
 #include "Light.h"
@@ -494,117 +495,6 @@ UpdateInputState(GameInput* previousInput, GameInput* newInput)
 			*newController = {};
 		}
 	}
-}
-
-internal_link void
-HandleCameraMovement(GameState* gameState, GameInput* previousInput, GameInput* newInput, Camera* camera, 
-					 float cameraSpeed, float mouseSensitivity, float thumbstickSensitivity)
-{
-	cameraSpeed *= gameState->deltaTime;
-	mouseSensitivity *= gameState->deltaTime;
-	thumbstickSensitivity *= gameState->deltaTime;
-
-	//
-	// NOTE: Handle look
-	//
-	float yaw = camera->yaw;
-	float pitch = camera->pitch;
-
-	if (gameState->isFocused)
-	{
-		// NOTE: Mouse look
-		float xMouseOffset = (float)newInput->mouse.x - (float)previousInput->mouse.x;
-		float yMouseOffset = (float)previousInput->mouse.y - (float)newInput->mouse.y;
-
-		// NOTE: Controller look
-		float xRightThumbstick = 0.f;
-		float yRightThumbstick = 0.f;
-		for (unsigned int controllerIndex = 0; controllerIndex < ARRAYSIZE(newInput->controllers); ++controllerIndex)
-		{
-			GameControllerInput* newController = newInput->controllers + controllerIndex;
-			
-			if (newController->isConnected)
-			{
-				xRightThumbstick += newController->rightThumbstick.x;
-				yRightThumbstick += newController->rightThumbstick.y;
-			}
-		}
-
-		yaw += ((xMouseOffset * mouseSensitivity) + (xRightThumbstick * thumbstickSensitivity));
-		pitch += ((yMouseOffset * mouseSensitivity) + (yRightThumbstick * thumbstickSensitivity));
-
-		// NOTE: Allow the camera to look up and down but clamping before hitting 90 where the LookAt would flip
-		if(pitch > 89.f)
-		{
-			pitch = 89.f;
-		}
-		if(pitch < -89.f)
-		{
-			pitch = -89.f;
-		}
-	}
-
-	// NOTE: Store yaw and pitch before converting to radians
-	camera->yaw = yaw;
-	camera->pitch = pitch;
-
-	yaw = DirectX::XMConvertToRadians(yaw);
-	pitch = DirectX::XMConvertToRadians(pitch);
-	float x = DirectX::XMScalarCos(yaw) * DirectX::XMScalarCos(pitch);
-	float y = DirectX::XMScalarSin(pitch);
-	float z = DirectX::XMScalarSin(yaw) * DirectX::XMScalarCos(pitch);
-	DirectX::XMVECTOR direction = DirectX::XMVectorSet(x, y, z, 0.f);
-
-	//
-	// NOTE: Handle directional movement
-	//
-	float moveRight = 0.0f;
-	float moveFront = 0.0f;
-	for (unsigned int controllerIndex = 0; controllerIndex < ARRAYSIZE(newInput->controllers); ++controllerIndex)
-	{
-		GameControllerInput* controller = newInput->controllers + controllerIndex;
-		if (controller->isConnected)
-		{
-			moveRight += controller->leftThumbstick.x;
-			moveFront += controller->leftThumbstick.y;
-		}
-	}
-
-	DirectX::FXMVECTOR previousPosition = DirectX::XMLoadFloat3(&camera->position);
-	DirectX::FXMVECTOR front = DirectX::XMVector3Normalize(direction);
-	DirectX::FXMVECTOR up = DirectX::XMLoadFloat3(&camera->up);
-	DirectX::FXMVECTOR right = DirectX::XMVector3Normalize(DirectX::XMVector3Cross(front, up));
-	
-	// NOTE: Factor in summed controller movement
-	DirectX::XMVECTOR newMovement = DirectX::XMVectorAdd(DirectX::XMVectorScale(right, moveRight), DirectX::XMVectorScale(front, moveFront));
-
-	// NOTE: Keyboard movement
-	if (newInput->keyboard.w.endedDown)
-	{
-		newMovement = DirectX::XMVectorAdd(newMovement, front);
-	}
-	if (newInput->keyboard.a.endedDown)
-	{
-		newMovement = DirectX::XMVectorSubtract(newMovement, right);
-	}
-	if (newInput->keyboard.s.endedDown)
-	{
-		newMovement = DirectX::XMVectorSubtract(newMovement, front);
-	}
-	if (newInput->keyboard.d.endedDown)
-	{
-		newMovement = DirectX::XMVectorAdd(newMovement, right);
-	}
-	
-	float newMovementLengthSq = DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(newMovement));
-	if (newMovementLengthSq > 1.f)
-	{
-		newMovement = DirectX::XMVector3Normalize(newMovement);
-	}
-
-	DirectX::XMVECTOR newPosition = DirectX::XMVectorAdd(previousPosition, DirectX::XMVectorScale(newMovement, cameraSpeed));
-	DirectX::XMStoreFloat3(&camera->position, newPosition);
-	DirectX::XMStoreFloat3(&camera->front, front);
 }
 
 int CALLBACK
