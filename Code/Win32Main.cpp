@@ -162,6 +162,10 @@ Win32ProcessPendingMessages(HWND window, D3DResource* d3dResource, GameMouseInpu
 					{	
 						Win32ProcessButtonMessage(&keyboard->p, isDown);
 					}
+					else if (virtualKeyCode == 'F') 
+					{	
+						Win32ProcessButtonMessage(&keyboard->f, isDown);
+					}
 					else if (virtualKeyCode == 'M')
 					{	
 						Win32ProcessButtonMessage(&keyboard->m, isDown);
@@ -542,16 +546,15 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			Shaders shaders = {};
 			LoadAllShaders(d3dResource.device, &shaders);
 
-			Meshs meshs = LoadAllMeshs(d3dResource.device, &shaders);
-
 			Sprite sprite = CreateSprite(d3dResource.device, &shaders);
 			ScaleUniform(&sprite.transform, 0.5f);
 
-			Lights lights = {};
+			Lights lights = InitializeLights(d3dResource.device);
+			
 			lights.directionalLightData = CreateDirectionalLight(
 				DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.f),
-				DirectX::XMFLOAT4(1.f, 1.f, 1.f, 1.f), 
-				DirectX::XMFLOAT4(0.2f, -1.f, -0.3f, 0.f)
+				DirectX::XMFLOAT4(0.241f, 0.043f, 0.003f, 1.f),
+				DirectX::XMFLOAT4(-0.2f, -0.2f, -0.3f, 0.f)
 			);
 
 			lights.pointLights[0] = CreatePointLight(
@@ -559,24 +562,34 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				&shaders, 
 				0.25f, 
 				DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.f),
-				DirectX::XMFLOAT4(1.f, 1.f, 1.f, 1.f),
-				DirectX::XMFLOAT4(2.f, 2.f, -4.f, 1.f),
+				DirectX::XMFLOAT4(0.f, 0.68f, 0.725f, 1.f),
+				DirectX::XMFLOAT4(0.f, 0.f, 0.f, 1.f),
+				DirectX::XMFLOAT4(1.f, 0.14f, 0.07f, 0.f)
+			);
+
+			lights.pointLights[3] = CreatePointLight(
+				d3dResource.device, 
+				&shaders, 
+				0.25f, 
+				DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.f),
+				DirectX::XMFLOAT4(0.f, 1.f, 0.f, 1.f),
+				DirectX::XMFLOAT4(-2.f, 3.f, -2.f, 1.f),
 				DirectX::XMFLOAT4(1.f, 0.14f, 0.07f, 0.f)
 			);
 
 			lights.spotLights[0] = CreateSpotLight(
 				d3dResource.device, 
 				&shaders, 
-				0.25f, 
+				0.1f, 
 				DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.f),
-				DirectX::XMFLOAT4(1.f, 1.f, 1.f, 1.f),
-				DirectX::XMFLOAT4(0.f, 0.f, 0.f, 1.f),
+				DirectX::XMFLOAT4(0.992f, 0.988f, 0.862f, 1.f),
+				DirectX::XMFLOAT4(0.f, 0.f, 4.f, 1.f),
 				DirectX::XMFLOAT4(0.f, 0.f, -1.f, 0.f),
 				DirectX::XMFLOAT4(DirectX::XMScalarCos(DirectX::XMConvertToRadians(12.f)), DirectX::XMScalarCos(DirectX::XMConvertToRadians(20.f)), 0.f, 0.f),
 				DirectX::XMFLOAT4(1.f, 0.045f, 0.0075f, 0.f)
 			);
-			
-			Light light = CreateCubeLight(d3dResource.device, &shaders, 0.25f);
+
+			Meshs meshs = LoadAllMeshs(d3dResource.device, &shaders);
 
 			Mesh crates[] = 
 			{
@@ -687,6 +700,18 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 					D3DGoExclusiveFullscreen(&d3dResource);
 				}
 
+				if (newInput.keyboard.f.endedDown)
+				{
+					DirectX::XMStoreFloat3(
+						&lights.spotLights[0].transform.position,
+						DirectX::XMVectorSet(camera.position.x, camera.position.y, camera.position.z, 1.f)
+					);
+					DirectX::XMStoreFloat4(
+						&lights.spotLights[0].data.direction, 
+						DirectX::XMVectorSet(camera.front.x, camera.front.y, camera.front.z, 0.f)
+					);
+				}
+
 				HandleCameraMovement(&gameState, &previousInput, &newInput, &camera, 5.f, 30.f, 100.f);
 
 				//
@@ -694,7 +719,7 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 				//
 				D3DClearRenderTarget(&d3dResource, backBufferColor);
 
-				UpdateRenderLight(&light, &camera, &d3dResource, &gameState);
+				UpdateRenderLights(&lights, &camera, &d3dResource, &gameState);
 
 				for (unsigned int crateIndex = 0; crateIndex < ARRAYSIZE(crates); ++crateIndex)
 				{

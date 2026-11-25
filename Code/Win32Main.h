@@ -69,6 +69,7 @@ struct GameKeyboardInput
 			GameButton c;
 			GameButton p;
 			GameButton m;
+			GameButton f;
 			GameButton escape;
 			GameButton space;
 			GameButton up;

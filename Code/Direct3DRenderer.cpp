@@ -383,22 +383,21 @@ CreatePixelShaderFromFile(ID3D11Device* device, ID3D11PixelShader** pixelShader,
 {
 	assert(pixelShaderFilename);
 
-	size_t destSize = 4096;
+	size_t destSize = 8192;
 	size_t bytesRead = 0;
 	FILE* pixelShaderFile = {0};
 
 	errno_t openFileResult = fopen_s(&pixelShaderFile, pixelShaderFilename, "rb");
-	if (openFileResult == 0)
-	{
-		BYTE* bytes = (BYTE*)malloc(destSize * sizeof(BYTE));
-		bytesRead = fread_s(bytes, destSize, 1, 4096, pixelShaderFile);
+	assert(openFileResult == 0);
 
-		HRESULT result = device->CreatePixelShader(bytes, bytesRead, 0, pixelShader);
-		ASSERT_OK(result, "Unable to create pixel shader");
-		
-		free(bytes);
-		fclose(pixelShaderFile);
-	}
+	BYTE* bytes = (BYTE*)malloc(destSize * sizeof(BYTE));
+	bytesRead = fread_s(bytes, destSize, 1, destSize, pixelShaderFile);
+
+	HRESULT result = device->CreatePixelShader(bytes, bytesRead, 0, pixelShader);
+	ASSERT_OK(result, "Unable to create pixel shader");
+	
+	free(bytes);
+	fclose(pixelShaderFile);
 }
 
 internal_link void
