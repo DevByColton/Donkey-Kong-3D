@@ -261,10 +261,10 @@ Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 			PostMessageA(window, WM_APP_ACTIVATEAPP, wParam, lParam);
 		} break;
 
-		case WM_SETCURSOR:
-		{
-			PostMessageA(window, WM_APP_SETCURSOR, wParam, lParam);
-		} break;
+		// case WM_SETCURSOR:
+		// {
+		// 	PostMessageA(window, WM_APP_SETCURSOR, wParam, lParam);
+		// } break;
 
 		case WM_MOUSEWHEEL:
 		case WM_MOUSEMOVE:
@@ -547,29 +547,55 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 			Sprite sprite = CreateSprite(d3dResource.device, &shaders);
 			ScaleUniform(&sprite.transform, 0.5f);
 
+			Lights lights = {};
+			lights.directionalLightData = CreateDirectionalLight(
+				DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.f),
+				DirectX::XMFLOAT4(1.f, 1.f, 1.f, 1.f), 
+				DirectX::XMFLOAT4(0.2f, -1.f, -0.3f, 0.f)
+			);
+
+			lights.pointLights[0] = CreatePointLight(
+				d3dResource.device, 
+				&shaders, 
+				0.25f, 
+				DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.f),
+				DirectX::XMFLOAT4(1.f, 1.f, 1.f, 1.f),
+				DirectX::XMFLOAT4(2.f, 2.f, -4.f, 1.f),
+				DirectX::XMFLOAT4(1.f, 0.14f, 0.07f, 0.f)
+			);
+
+			lights.spotLights[0] = CreateSpotLight(
+				d3dResource.device, 
+				&shaders, 
+				0.25f, 
+				DirectX::XMFLOAT4(0.1f, 0.1f, 0.1f, 1.f),
+				DirectX::XMFLOAT4(1.f, 1.f, 1.f, 1.f),
+				DirectX::XMFLOAT4(0.f, 0.f, 0.f, 1.f),
+				DirectX::XMFLOAT4(0.f, 0.f, -1.f, 0.f),
+				DirectX::XMFLOAT4(DirectX::XMScalarCos(DirectX::XMConvertToRadians(12.f)), DirectX::XMScalarCos(DirectX::XMConvertToRadians(20.f)), 0.f, 0.f),
+				DirectX::XMFLOAT4(1.f, 0.045f, 0.0075f, 0.f)
+			);
+			
 			Light light = CreateCubeLight(d3dResource.device, &shaders, 0.25f);
 
-			Mesh suzannes[6] = 
+			Mesh crates[] = 
 			{
-				{&meshs.suzanne, {DirectX::XMFLOAT3(2.f, 2.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.7f, 1.f, 1.f)}},
-				{&meshs.suzanne, {DirectX::XMFLOAT3(-3.f, -2.5f, -4.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 0.2f, 1.f)}},
-				{&meshs.suzanne, {DirectX::XMFLOAT3(4.f, 4.f, -6.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
-				{&meshs.suzanne, {DirectX::XMFLOAT3(-5.f, 7.f, -10.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
-				{&meshs.suzanne, {DirectX::XMFLOAT3(-8.3f, 8.f, -6.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
-				{&meshs.suzanne, {DirectX::XMFLOAT3(1.f, 0.f, -7.6f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.crate, {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.crate, {DirectX::XMFLOAT3(4.f, 2.f, 0.f), DirectX::XMFLOAT3(20.f, 20.f, 0.f), DirectX::XMFLOAT3(0.7f, 1.f, 1.f)}},
+				{&meshs.crate, {DirectX::XMFLOAT3(-3.f, -2.5f, -4.f), DirectX::XMFLOAT3(10.f, 20.f, 0.f), DirectX::XMFLOAT3(1.f, 0.2f, 1.f)}},
+				{&meshs.crate, {DirectX::XMFLOAT3(4.f, 4.f, -6.f), DirectX::XMFLOAT3(30.f, 40.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.crate, {DirectX::XMFLOAT3(-5.f, 7.f, -10.f), DirectX::XMFLOAT3(12.f, 52.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.crate, {DirectX::XMFLOAT3(-8.3f, 8.f, -6.f), DirectX::XMFLOAT3(35.f, 55.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.crate, {DirectX::XMFLOAT3(1.f, 0.f, -7.6f), DirectX::XMFLOAT3(45.f, 70.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
 			};
 
-			Mesh crate = {};
-			crate.data = &meshs.crate;
-			crate.transform = {DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
-
-			Mesh crate2 = {};
-			crate2.data = &meshs.crate;
-			crate2.transform = {DirectX::XMFLOAT3(-3.f, 0.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
-
-			Mesh torus = {};
-			torus.data = &meshs.torus;
-			torus.transform = {DirectX::XMFLOAT3(-3.f, 3.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)};
+			Mesh tori[] = 
+			{
+				{&meshs.torus, {DirectX::XMFLOAT3(-3.f, 3.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.torus, {DirectX::XMFLOAT3(-4.f, -2.3f, 0.f), DirectX::XMFLOAT3(20.f, 20.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.torus, {DirectX::XMFLOAT3(-6.f, 4.5f, -4.f), DirectX::XMFLOAT3(10.f, 20.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}},
+				{&meshs.torus, {DirectX::XMFLOAT3(-10.2f, -3.4f, -2.f), DirectX::XMFLOAT3(30.f, 40.f, 0.f), DirectX::XMFLOAT3(1.f, 1.f, 1.f)}}
+			};
 
 			Camera camera = {};
 			camera.yaw = -90.f;
@@ -670,18 +696,19 @@ WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showC
 
 				UpdateRenderLight(&light, &camera, &d3dResource, &gameState);
 
-				for (unsigned int suzanneIndex = 0; suzanneIndex < ARRAYSIZE(suzannes); ++suzanneIndex)
+				for (unsigned int crateIndex = 0; crateIndex < ARRAYSIZE(crates); ++crateIndex)
 				{
-					Mesh* suzanne = suzannes + suzanneIndex;
-					UpdateRenderMesh(suzanne, &camera, &d3dResource);
+					Mesh* crate = crates + crateIndex;
+					UpdateRenderMesh(crate, &camera, &d3dResource);
 				}
 
-				UpdateRenderMesh(&crate, &camera, &d3dResource);
-				UpdateRenderMesh(&crate2, &camera, &d3dResource);
-				
-				torus.transform.rotation.x = 20.f*gameState.totalTime;
-				torus.transform.rotation.y = 10.f*gameState.totalTime;
-				UpdateRenderMesh(&torus, &camera, &d3dResource);
+				for (unsigned int torusIndex = 0; torusIndex < ARRAYSIZE(tori); ++torusIndex)
+				{
+					Mesh* torus = tori + torusIndex;
+					torus->transform.rotation.x = (torusIndex + 1) * 5.f * gameState.totalTime;
+					torus->transform.rotation.y = (torusIndex + 1) * 10.f * gameState.totalTime;
+					UpdateRenderMesh(torus, &camera, &d3dResource);
+				}
 
 				float padding = 20.f;
 				sprite.transform.position = DirectX::XMFLOAT3(

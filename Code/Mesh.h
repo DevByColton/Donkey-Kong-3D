@@ -22,9 +22,8 @@ struct MeshData
 
 struct Meshs
 {
-	MeshData suzanne = {};
-	MeshData torus = {};
 	MeshData crate = {};
+	MeshData torus = {};
 };
 
 struct Mesh
@@ -356,11 +355,6 @@ LoadAllMeshs(ID3D11Device* device, Shaders* shaders)
 	meshs.torus.renderData.vertexShader = shaders->lightingVertexShader.shader;
 	meshs.torus.renderData.inputLayout = shaders->lightingVertexShader.inputLayout;
 	meshs.torus.renderData.pixelShader = shaders->lightingPixelShader;
-
-	meshs.suzanne = CreateMeshFromWavefrontFile(device, "Suzanne.obj");
-	meshs.suzanne.renderData.vertexShader = shaders->lightingVertexShader.shader;
-	meshs.suzanne.renderData.inputLayout = shaders->lightingVertexShader.inputLayout;
-	meshs.suzanne.renderData.pixelShader = shaders->lightingPixelShader;
 
 	return meshs;
 }
